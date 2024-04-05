@@ -1,21 +1,15 @@
 from asyncio.events import AbstractEventLoop
 from contextlib import AbstractAsyncContextManager
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Dict,
-    List,
-    Optional,
-    Type,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Type, TypeVar
 
 import aiomysql
 from aiomysql import Connection
 from aiomysql import Cursor as AIOMySQLCursor
 
-from ormantic.dialects.mysql.query import Insert, MysqlMixin, Query, UpInsert
+from ormantic.dialects.mysql.query import sql_params
 from ormantic.model import Model
+from ormantic.query import Insert, Query
+from ormantic.typing import ABCQuery
 from ormantic.utils import logger
 
 AIOCursor = TypeVar("AIOCursor", bound=AIOMySQLCursor)
@@ -72,9 +66,9 @@ class AsyncClient(AbstractAsyncContextManager):
         await self.connect()
         return await self.connection.cursor(*cursor_class)
 
-    async def execute(self, query: MysqlMixin, commit=False) -> List[Dict]:
+    async def execute(self, query: ABCQuery, commit=False) -> List[Dict]:
         cursor = await self.cursor(aiomysql.DictCursor)
-        sql, params = query.sql_params()
+        sql, params = sql_params(query)
         logger.info(f"sql_params: {sql}, {params}")
         await cursor.execute(sql, params)
         if commit:
@@ -83,12 +77,12 @@ class AsyncClient(AbstractAsyncContextManager):
         data: List[Dict] = await cursor.fetchall()
         return data
 
-    async def commit(self, *queries: MysqlMixin) -> None:
+    async def commit(self, *queries: ABCQuery) -> None:
         await self.connect()
         try:
             async with self.connection.cursor() as cursor:
                 for query in queries:
-                    sql, params = query.sql_params()
+                    sql, params = sql_params(query)
                     logger.info(f"sql_params: {sql}, {params}")
                     if isinstance(query, Insert):
                         if len(params) == 1:
@@ -98,45 +92,36 @@ class AsyncClient(AbstractAsyncContextManager):
                     else:
                         await cursor.execute(sql, params)
                 await self.connection.commit()
-        except Exception:  # pragma: no cover
+        finally:
             await self.connection.rollback()
-            raise
 
     async def commit_model(self, *models: Model) -> None:
         await self.connect()
         try:
             async with self.connection.cursor() as cursor:
                 for model in models:
-                    sql, params = UpInsert(model).sql_params()
+                    sql, params = sql_params(model)
                     logger.info(f"sql_params: {sql}, {params}")
                     await cursor.execute(sql, params)
                     inc_id = cursor.lastrowid
-                    print("inc_id", inc_id)
-                    model.set_inc_id(inc_id)
+                    if inc_id is not None:
+                        logger.info(f"lastrowid: {inc_id}")
+                        model.set_auto_increment(inc_id)
             await self.connection.commit()
-        except Exception:
+        finally:
             await self.connection.rollback()
-            raise
 
     async def count(self, query: Query) -> int:
-        if getattr(query, "is_count", None) is None:
-            # TODO
-            raise ValueError("query is not count")
-
         cursor = await self.cursor()
-        sql, params = query.sql_params()
+        sql, params = sql_params(query)
         logger.info(sql)
         await cursor.execute(sql, params)
         (result,) = await cursor.fetchone()
         return result
 
     async def distinct(self, query: Query) -> List[Any]:
-        if getattr(query, "is_distinct", None) is None:
-            # TODO
-            raise ValueError("query is not distinct")
-
         cursor = await self.cursor()
-        sql, params = query.sql_params()
+        sql, params = sql_params(query)
         logger.info(sql)
         await cursor.execute(sql, params)
         data = await cursor.fetchall()

@@ -45,7 +45,7 @@ omit = ["ormantic/schemas.py"]
 
 
 [tool.coverage.report]
-include = ["ormantic/*", "tests/*"]
+include = ["ormantic/*.py"]
 
 omit = ["**/conftest.py"]
 exclude_lines = [
@@ -54,6 +54,10 @@ exclude_lines = [
     "@pytest.mark.skip",
     "def __repr__.*",
     "def __copy__.*",
+    "def __str__.*",
+    "def __hash__.*",
+    "def __pos__.*",
+    "raise NotImplementedError",
 ]
 
 
@@ -78,3 +82,10 @@ reportIncompatibleMethodOverride = false
 [tool.codespell]
 skip = '.git,env*'
 ignore-words-list = 'nin,NIN'
+
+
+
+[tool.pytest.ini_options]
+markers =[
+    "orm: mark a test orm."
+]

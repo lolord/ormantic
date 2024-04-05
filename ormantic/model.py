@@ -1,11 +1,9 @@
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Dict,
     Optional,
-    Sequence,
     Tuple,
     Type,
     TypeVar,
@@ -17,10 +15,14 @@ from typing import (
 
 import pydantic
 
-from .errors import PrimaryKeyMissingError, PrimaryKeyModifyError
-from .fields import Field, FieldProxy
-from .typing import FieldDict
-from .utils import is_dunder
+from ormantic.errors import (
+    AutoIncrementFieldExists,
+    PrimaryKeyMissingError,
+    PrimaryKeyModifyError,
+)
+from ormantic.fields import Field, FieldProxy
+from ormantic.typing import FieldDict
+from ormantic.utils import is_dunder
 
 if TYPE_CHECKING:
     from .typing import AbstractSetIntStr, DictStrAny, MappingIntStrAny
@@ -36,6 +38,7 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
         hot_fields = set()
         annotations = {}
         relations = {}
+
         base_annotations: Dict[str, Any] = namespace.get("__annotations__", {})
 
         for field_name, field_type in base_annotations.items():
@@ -44,18 +47,20 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
 
             if field_name in namespace:
                 default = namespace.get(field_name)
-                if isinstance(default, pydantic.fields.FieldInfo):
+                if default is None:
+                    annotations[field_name] = Optional[field_type]
+
+                else:
+                    assert isinstance(default, pydantic.fields.FieldInfo)
                     if default.extra.get("update_factory") is not None:
                         hot_fields.add(field_name)
                     if default.extra.get("autoincrement") is True:
                         annotations[field_name] = Optional[field_type]
-                elif default is None:
-                    annotations[field_name] = Optional[field_type]
 
-                if field_name not in annotations:
-                    annotations[field_name] = field_type
+            if field_name not in annotations:
+                annotations[field_name] = field_type
 
-        for r in relations:
+        for r in relations:  # pragma: no cover
             annotations.pop(r)
             namespace.pop(r)
         return hot_fields, annotations, relations
@@ -98,16 +103,14 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
                 if inc_field is None:
                     cls.__inc_field__ = field_name
                 else:
-                    raise ValueError(
-                        f"Table fields can only be one: {inc_field}, {field_name}"
-                    )
+                    raise AutoIncrementFieldExists(inc_field)
 
             if field.primary:
                 cls.__primary_keys__[field_name] = field
             else:
                 cls.__petty_keys__[field_name] = field
 
-        if not abstract:
+        if not abstract:  # pragma: no cover
             if not cls.__primary_keys__ and _is_base_model_class_defined:
                 raise PrimaryKeyMissingError(f"{name} not find primary key")
 
@@ -118,7 +121,6 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
 
 
 class BaseORMModel(pydantic.BaseModel):
-    __slots__ = "__fields_modified__"
     if TYPE_CHECKING:
         __table__: ClassVar[str]
         __orm_fields__: ClassVar[FieldDict[FieldProxy]]
@@ -142,7 +144,7 @@ class BaseORMModel(pydantic.BaseModel):
     def __setattr__(self, name: str, value: Any) -> None:
         if name in self.__fields__:
             if name in self.__primary_keys__ and getattr(self, name, None) is not None:
-                raise PrimaryKeyModifyError()
+                raise PrimaryKeyModifyError
             proxy = cast(FieldProxy, self.__orm_fields__[name])
 
             if not proxy.nullable and value is None:
@@ -154,72 +156,46 @@ class BaseORMModel(pydantic.BaseModel):
 
             super().__setattr__(name, value)
 
-            self.__fields_modified__.add(name)
-
             if name not in self.__hot_fields__:
                 for t in self.__hot_fields__:
-                    field = self.__orm_fields__.get(t)
-                    if field is not None and field.update_factory is not None:
-                        setattr(self, t, field.update_factory())
-                        self.__fields_modified__.add(name)
+                    field = self.__orm_fields__[t]
+                    assert field.update_factory is not None
+                    super().__setattr__(t, field.update_factory())
         else:
             object.__setattr__(self, name, value)
 
-    def _key_tuple(self):
-        return tuple(getattr(self, k) for k in self.__primary_keys__.keys())
-
-    def __getattr__(self, name: str) -> Any:
-        if name in self.__relation_infos__:
-            return self._relations_[name]
-        return super().__getattribute__(name)
+    # TODO
+    # def __getattr__(self, name: str) -> Any:
+    #     if name in self.__relation_infos__:
+    #         return self._relations_[name]
+    #     return super().__getattribute__(name)
 
     def __getattribute__(self, name: str) -> Any:
         attr = super().__getattribute__(name)
-        if isinstance(attr, FieldProxy):
+        if isinstance(attr, FieldProxy):  # pragma: no cover
             return None
         return super().__getattribute__(name)
 
     def __init__(self, **data: Any):
         # The default value obtained through object signature may be None.
         # If there is a factory method, this field should be popped.
-        for k, v in list(data.items()):
-            if v is None and k in self.__orm_fields__:
-                field = self.__orm_fields__[k]
-                if field.default_factory and not field.nullable:
-                    data.pop(k)
 
-        values, fields_set, validation_error = pydantic.main.validate_model(
-            self.__class__, data
-        )
+        for name, field in self.__orm_fields__.items():
+            if field.nullable:
+                if name not in data:
+                    data[name] = None
+            elif data.get(name) is None:
+                if field.default_factory:
+                    data[name] = field.default_factory()
+                if field.update_factory:
+                    data[name] = field.update_factory()
 
-        if validation_error:
-            raise validation_error
         try:
-            pydantic.main.object_setattr(self, "__dict__", values)
+            super(BaseORMModel, self).__init__(**data)
         except TypeError as e:  # pragma: no cover
             raise TypeError(
                 "Model values must be a dict; you may not have returned a dictionary from a root validator"
             ) from e
-        pydantic.main.object_setattr(self, "__fields_set__", fields_set)
-        self._init_private_attributes()
-
-        object.__setattr__(self, "__fields_modified__", set(self.__orm_fields__.keys()))
-
-    def __repr_args__(self) -> Sequence[Tuple[Optional[str], Any]]:
-        return ((k, v) for k, v in self.__dict__.items() if k in self.__fields__)  # type: ignore
-
-    @classmethod
-    def encode(
-        cls,
-        value: Any,
-        encoder: Optional[Callable[[Any], Any]] = None,
-        ensure_ascii=False,
-        **dumps_kwargs: Any,
-    ):
-        encoder = cast(Callable[[Any], Any], encoder or cls.__json_encoder__)
-        return cls.__config__.json_dumps(
-            value, default=encoder, ensure_ascii=ensure_ascii, **dumps_kwargs
-        )
 
     def dict(
         self,
@@ -231,7 +207,6 @@ class BaseORMModel(pydantic.BaseModel):
         exclude_unset: bool = False,
         exclude_defaults: bool = False,
         exclude_none: bool = False,
-        exclude_unmod: bool = False,
         primary_keys: Optional[bool] = None,
         petty_keys: Optional[bool] = None,
     ) -> "DictStrAny":
@@ -239,13 +214,11 @@ class BaseORMModel(pydantic.BaseModel):
             self.__class__, self.__dict__
         )
 
-        if validation_error is not None:
+        if validation_error:  # pragma: no cover
             raise validation_error
 
         include = set() if include is None else set(include)
         exclude = set() if exclude is None else set(exclude)
-        if exclude_unmod:
-            include.update(self.__fields_modified__)
 
         if primary_keys is True:
             include.update(self.__primary_keys__)
@@ -270,44 +243,11 @@ class BaseORMModel(pydantic.BaseModel):
         )
         return data
 
-    def json(
-        self,
-        *,
-        include: Union["AbstractSetIntStr", "MappingIntStrAny", None] = None,
-        exclude: Union["AbstractSetIntStr", "MappingIntStrAny", None] = None,
-        by_alias: bool = False,
-        skip_defaults: Optional[bool] = None,
-        exclude_unset: bool = False,
-        exclude_defaults: bool = False,
-        exclude_none: bool = False,
-        encoder: Optional[Callable[[Any], Any]] = None,
-        **dumps_kwargs: Any,
-    ) -> str:
-        _, _, validation_error = pydantic.main.validate_model(
-            self.__class__, self.__dict__
-        )
-        if validation_error:
-            raise validation_error
-
-        return super().json(
-            include=include,
-            exclude=exclude,
-            by_alias=by_alias,
-            skip_defaults=skip_defaults,
-            exclude_unset=exclude_unset,
-            exclude_defaults=exclude_defaults,
-            exclude_none=exclude_none,
-            encoder=encoder,
-            **dumps_kwargs,
-        )
-
-    def set_inc_id(self, inc_id: int):
-        inc_field = self.__inc_field__
-        if inc_field is not None:
-            if getattr(self, inc_field, None) is None:
-                setattr(self, inc_field, inc_id)
-        else:
-            raise ValueError("not find autoincrement field")
+    def set_auto_increment(self, inc_id: int) -> bool:
+        if self.__inc_field__ and getattr(self, self.__inc_field__) is None:
+            setattr(self, self.__inc_field__, inc_id)
+            return True
+        return False
 
 
 class Model(BaseORMModel, metaclass=ModelMetaclass):

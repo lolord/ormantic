@@ -5,20 +5,22 @@ from typing import (
     Awaitable,
     Generator,
     List,
+    Literal,
     Optional,
     Tuple,
     Type,
+    Union,
 )
 
 from aiomysql.cursors import DictCursor
 
-from ormantic.express import BoolExpression
+from ormantic.dialects.mysql.client import AsyncClient
+from ormantic.dialects.mysql.query import sql_params
+from ormantic.express import Predicate
 from ormantic.fields import FieldProxy, SupportSort
 from ormantic.model import ModelType
+from ormantic.query import Delete, Query
 from ormantic.typing import ABCField
-
-from .client import AsyncClient
-from .query import Delete, Query
 
 
 class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
@@ -44,7 +46,7 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
         if self.cursor is None:
             self.cursor = yield from self.engine._client.cursor(DictCursor).__await__()
 
-        sql, params = self.query.sql_params()
+        sql, params = sql_params(self.query)
 
         yield from self.cursor.execute(sql, params).__await__()
         rows = yield from self.cursor.fetchall().__await__()
@@ -64,7 +66,7 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
             self.cursor = await self.engine._client.cursor(DictCursor)
         results = []
 
-        sql, params = self.query.sql_params()
+        sql, params = sql_params(self.query)
         await self.cursor.execute(sql, params)
         rows = await self.cursor.fetchall()
         for row in rows:
@@ -85,7 +87,7 @@ class AIOEngine:
     def find(
         self,
         model: Type[ModelType],
-        *filters: BoolExpression,
+        *filters: Predicate,
         sorts: List[Tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
@@ -114,7 +116,7 @@ class AIOEngine:
     async def find_one(
         self,
         model: Type[ModelType],
-        *filters: BoolExpression,
+        *filters: Predicate,
         sorts: List[Tuple[SupportSort, bool]] = [],
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
@@ -138,8 +140,8 @@ class AIOEngine:
     async def count(
         self,
         model: Type[ModelType],
-        field: ABCField,
-        *filters: BoolExpression,
+        field: Union[ABCField, Literal[1, "*"]] = "*",
+        *filters: Predicate,
     ) -> int:
         """Get the count of rows matching a query
 
@@ -158,7 +160,7 @@ class AIOEngine:
         self,
         model: Type[ModelType],
         field: FieldProxy,
-        *filters: BoolExpression,
+        *filters: Predicate,
         sorts: List[Tuple[SupportSort, bool]] = [],
     ) -> List[Any]:
         """_summary_
@@ -222,4 +224,4 @@ class AIOEngine:
         return instances
 
     async def close(self):
-        await self._client.__aexit__(None, None, None)
+        await self._client.__aexit__(None, None, None)  # type: ignore

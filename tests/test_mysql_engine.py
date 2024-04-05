@@ -1,8 +1,7 @@
 import pytest
 
 from ormantic import Field, Model, PrimaryKeyModifyError
-from ormantic.dialects.mysql.client import AsyncClient
-from ormantic.dialects.mysql.engine import AIOEngine
+from ormantic.dialects.mysql import AIOEngine, AsyncClient
 
 """CREATE TABLE `users` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -80,7 +79,7 @@ async def test_mysql_engine():
     assert user is not None
     assert user.id == inc_id
 
-    # once the primary key is assigned, it cannot be modified
+    # if the primary key is not None, it cannot be modified
     with pytest.raises(PrimaryKeyModifyError):
         user.id = user.id + 1
 
