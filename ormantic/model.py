@@ -87,23 +87,22 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
         namespace["__hot_fields__"] = tuple(hot_fields)
         namespace["__primary_keys__"] = {}
         namespace["__petty_keys__"] = {}
-
+        namespace["__inc_field__"] = None
         namespace["__relation_infos__"] = {k: v for k, v in relations.items()}
 
         cls: Type[Model] = super().__new__(mcs, name, bases, namespace, **kwargs)
 
         for field_name in cls.__fields__:
             pydantic_field = cls.__fields__[field_name]
-            field = FieldProxy(pydantic_field=pydantic_field, orm_model=cls)
+            field = FieldProxy(pydantic_field=pydantic_field, table=cls)
             setattr(cls, field_name, field)
             cls.__orm_fields__[field_name] = field
 
             if field.autoincrement:
-                inc_field = getattr(cls, "__inc_field__", None)
-                if inc_field is None:
+                if cls.__inc_field__ is None:
                     cls.__inc_field__ = field_name
                 else:
-                    raise AutoIncrementFieldExists(inc_field)
+                    raise AutoIncrementFieldExists(field_name)
 
             if field.primary:
                 cls.__primary_keys__[field_name] = field
@@ -248,6 +247,12 @@ class BaseORMModel(pydantic.BaseModel):
             setattr(self, self.__inc_field__, inc_id)
             return True
         return False
+
+    @classmethod
+    def validate_row(cls, row: Dict):
+        val = cls.validate(row)
+        val.__fields_set__.clear()
+        return val
 
 
 class Model(BaseORMModel, metaclass=ModelMetaclass):

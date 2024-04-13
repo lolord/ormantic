@@ -48,3 +48,7 @@ class PredicateEncodeError(ORMError):
 
 class OperatorUnregisteredError(ORMError):
     ...
+
+
+class RowNotFoundError(ORMError):
+    ...

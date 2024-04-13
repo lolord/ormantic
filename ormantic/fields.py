@@ -201,16 +201,12 @@ class FieldProxy(
     DistinctFieldMixin,
     ABCField,
 ):
-    def __init__(self, pydantic_field: ModelField, orm_model: ABCTable) -> None:
+    def __init__(self, pydantic_field: ModelField, table: ABCTable) -> None:
         self.pydantic_field = pydantic_field
-        self.table = orm_model
+        self.table = table
 
     def __pos__(self) -> str:
         return self.pydantic_field.alias or self.pydantic_field.name
-
-    @property
-    def orm_model(self) -> ABCTable:
-        return self.table
 
     @property
     def required(self):
@@ -258,10 +254,10 @@ class FieldProxy(
         return self.pydantic_field.default_factory
 
     def __str__(self) -> str:
-        return f"{+self.orm_model}.{+self}"
+        return f"{+self.table}.{+self}"
 
     def __repr__(self) -> str:
-        return f"FieldProxy(name='{+self}', table='{+self.orm_model}')"
+        return f"FieldProxy(name='{+self}', table='{+self.table}')"
 
     def __hash__(self) -> int:
         return hash(str(self))

@@ -48,7 +48,7 @@ class SelectMixin:
 class FilterMixin:
     if TYPE_CHECKING:
         table: ABCTable
-        filters: List[Union[Predicate, Dict]]
+        filters: List[Predicate]
 
     def filter(self, *args: Union[Predicate, Dict, bool], **kwargs: Any):
         if getattr(self, "filters", None) is None:  # pragma: no cover
