@@ -1,4 +1,4 @@
-from ormantic.dialects.mysql.query import mysql_predicate_sql
+from ormantic.dialects.mysql.query import predicate_sql_params
 from ormantic.express import encode
 
 
@@ -7,13 +7,13 @@ def test_mysql_eq():
         {"name": "Tom"},
     )
 
-    assert mysql_predicate_sql(expr) == ("`name` = %s", ["Tom"])
+    assert predicate_sql_params(expr) == ("`name` = %s", ["Tom"])
 
     expr = encode(
         {"name": {"$eq": "Tom"}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`name` = %s", ["Tom"])
+    assert predicate_sql_params(expr) == ("`name` = %s", ["Tom"])
 
 
 def test_mysql_ne():
@@ -21,7 +21,7 @@ def test_mysql_ne():
         {"name": {"$ne": "Tom"}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`name` != %s", ["Tom"])
+    assert predicate_sql_params(expr) == ("`name` != %s", ["Tom"])
 
 
 def test_mysql_gt():
@@ -29,13 +29,13 @@ def test_mysql_gt():
         {"id": {"$gt": 1}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`id` > %s", [1])
+    assert predicate_sql_params(expr) == ("`id` > %s", [1])
 
     expr = encode(
         {"id": {"$gte": 1}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`id` >= %s", [1])
+    assert predicate_sql_params(expr) == ("`id` >= %s", [1])
 
 
 def test_mysql_lt():
@@ -43,13 +43,13 @@ def test_mysql_lt():
         {"id": {"$lt": 1}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`id` < %s", [1])
+    assert predicate_sql_params(expr) == ("`id` < %s", [1])
 
     expr = encode(
         {"id": {"$lte": 1}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`id` <= %s", [1])
+    assert predicate_sql_params(expr) == ("`id` <= %s", [1])
 
 
 def test_mysql_like():
@@ -60,7 +60,7 @@ def test_mysql_like():
         ]
     )
 
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`name` like %s and `name` not like %s",
         ["_%", "%_"],
     )
@@ -71,7 +71,7 @@ def test_mysql_regex():
         {"name": {"$regex": "Tom"}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`name` REGEXP %s", ["Tom"])
+    assert predicate_sql_params(expr) == ("`name` REGEXP %s", ["Tom"])
 
 
 def test_mysql_and():
@@ -85,7 +85,7 @@ def test_mysql_and():
         }
     )
 
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`id` > %s and `name` = %s and `id` < %s",
         [1, "test", 3],
     )
@@ -101,7 +101,7 @@ def test_mysql_or():
         }
     )
 
-    assert mysql_predicate_sql(expr) == ("`id` < %s or `id` > %s", [1, 10])
+    assert predicate_sql_params(expr) == ("`id` < %s or `id` > %s", [1, 10])
 
 
 def test_mysql_arithmetic():
@@ -109,52 +109,52 @@ def test_mysql_arithmetic():
         {"price": {"$add": [1, 2]}},
     )
 
-    assert mysql_predicate_sql(expr) == ("`price` + %s = %s", [1, 2])
+    assert predicate_sql_params(expr) == ("`price` + %s = %s", [1, 2])
 
     expr = encode(
         {"price": {"$sub": [1, 2]}},
     )
 
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`price` - %s = %s",
         [1, 2],
-    ), mysql_predicate_sql(expr)
+    ), predicate_sql_params(expr)
 
     expr = encode(
         {"price": {"$mul": [1, 2]}},
     )
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`price` * %s = %s",
         [1, 2],
-    ), mysql_predicate_sql(expr)
+    ), predicate_sql_params(expr)
 
     expr = encode(
         {"price": {"$floordiv": [2, 1]}},
     )
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`price` / %s = %s",
         [2, 1],
-    ), mysql_predicate_sql(expr)
+    ), predicate_sql_params(expr)
 
     expr = encode(
         {"price": {"$truediv": [2, 1]}},
     )
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`price` div %s = %s",
         [2, 1],
-    ), mysql_predicate_sql(expr)
+    ), predicate_sql_params(expr)
 
     expr = encode(
         {"price": {"$mod": [2, 1]}},
     )
-    assert mysql_predicate_sql(expr) == (
+    assert predicate_sql_params(expr) == (
         "`price` % %s = %s",
         [2, 1],
-    ), mysql_predicate_sql(expr)
+    ), predicate_sql_params(expr)
 
 
 def test_table_field():
     expr = encode(
         {"user.name": "Tom"},
     )
-    assert mysql_predicate_sql(expr) == ("`user`.`name` = %s", ["Tom"])
+    assert predicate_sql_params(expr) == ("`user`.`name` = %s", ["Tom"])

@@ -73,7 +73,7 @@ def test_model_fields():
 
 def test_auto_increment():
     stu = User(name="test")  # type: ignore
-    assert getattr(User, "__inc_field__") == "id"
+    assert User.__inc_field__ == "id"
     assert stu.id is None
     assert stu.set_auto_increment(1) is True
     assert stu.id == 1
@@ -84,7 +84,7 @@ def test_auto_increment():
     class Foo(Model):
         id: int = Field(primary=True)
 
-    assert hasattr(Foo, "__inc_field__") is False
+    assert Foo.__inc_field__ is None
 
 
 def test_auto_increment_error():

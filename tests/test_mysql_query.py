@@ -1,4 +1,4 @@
-from ormantic import Field, Model, Query
+from ormantic import Delete, Field, Model, Query
 from ormantic.dialects.mysql.query import sql_params
 
 
@@ -107,3 +107,11 @@ def test_count_distinct():
         "select count(distinct `user`.`id`) from `user` where `user`.`name` = %s",
         ("test",),
     )
+
+
+def test_delete():
+    query = Delete(User)
+    assert sql_params(query) == ("delete from `user`", ())
+
+    query.filter(User.id == 1)
+    assert sql_params(query) == ("delete from `user` where `user`.`id` = %s", (1,))

@@ -101,7 +101,7 @@ def mysql_predicate_tokens(expr: Any, sql: List[str], params: List):
         raise ValueError(f"Expression not supported: {expr}")
 
 
-def mysql_predicate_sql(expr: Predicate) -> Tuple[str, List]:
+def predicate_sql_params(expr: Predicate) -> Tuple[str, List]:
     sql = []
     params = []
     mysql_predicate_tokens(expr, sql, params)
@@ -126,19 +126,21 @@ def mysql_token(value: Any) -> str:
 
 def sql_params(value) -> tuple[str, tuple[Any, ...]]:
     if isinstance(value, Query):
-        return token_query(value)
+        return query_sql_params(value)
     if isinstance(value, Delete):
-        return token_delete(value)
+        return delete_sql_params(value)
     if isinstance(value, Update):
-        return token_update(value)
+        return update_sql_params(value)
     if isinstance(value, Insert):
-        return token_insert(value)
+        return insert_sql_params(value)
     if isinstance(value, Model):
-        return token_upsert(value)
+        return upsert_sql_params(value)
+    if isinstance(value, str):
+        return (value, ())
     raise ValueError(value)
 
 
-def token_query(query: Query) -> tuple[str, tuple[Any, ...]]:
+def query_sql_params(query: Query) -> tuple[str, tuple[Any, ...]]:
     sql = []
     params = []
     sql.append("select")
@@ -169,7 +171,7 @@ def token_query(query: Query) -> tuple[str, tuple[Any, ...]]:
     return " ".join(sql), tuple(params)
 
 
-def token_delete(query: Delete) -> tuple[str, tuple[Any, ...]]:
+def delete_sql_params(query: Delete) -> tuple[str, tuple[Any, ...]]:
     sql = []
     params = []
     sql.append("delete")
@@ -183,7 +185,7 @@ def token_delete(query: Delete) -> tuple[str, tuple[Any, ...]]:
     return " ".join(sql), tuple(params)
 
 
-def token_update(query: Update) -> tuple[str, tuple[Any, ...]]:
+def update_sql_params(query: Update) -> tuple[str, tuple[Any, ...]]:
     sql = []
     params = []
     sql.append("update")
@@ -207,7 +209,7 @@ def token_update(query: Update) -> tuple[str, tuple[Any, ...]]:
     return " ".join(sql), tuple(params)
 
 
-def token_insert(query: Insert) -> tuple[str, tuple[Any, ...]]:
+def insert_sql_params(query: Insert) -> tuple[str, tuple[Any, ...]]:
     sql = []
     params = []
     sql.append("insert")
@@ -237,7 +239,7 @@ def token_insert(query: Insert) -> tuple[str, tuple[Any, ...]]:
     return " ".join(sql), tuple(params)
 
 
-def token_upsert(value: Model) -> tuple[str, tuple[Any, ...]]:
+def upsert_sql_params(value: Model) -> tuple[str, tuple[Any, ...]]:
     sql = []
     params = []
     table = type(value)
