@@ -1,29 +1,3 @@
-# ormantic
-
-ORM(Object Relational Mapping) for relational database based on standard python type hints. It's built on top of pydantic for model definition and validation.
-
----
-
-## Features
-
-1. **Easy**: If you know how to use pydantic, then you will also use it.
-2. **Query**: Structured query objects can ignore differences between databases.
-3. **Validate**: Pydantic can help with data validation.
-
-## Requirements
-
-**Python**: 3.11 and later
-**Pydantic**: ~=1.10
-
-## Installation
-
-``` shell
-pip install git+https://github.com/lolord/ormantic.git
-```
-
-## Basic Usage
-
-``` python
 import pytest
 
 from ormantic import Field, Model, PrimaryKeyModifyError
@@ -115,11 +89,3 @@ async def test_mysql_curd():
 
     await session.close()
     await client.close()
-```
-
-## Implemented database dialects
-
-- [X] MySQL
-  - [X] Asyncio Engine
-- [ ] PostgreSQL
-- [ ] SQLite

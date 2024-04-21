@@ -1,19 +1,10 @@
-from enum import Enum
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Optional,
-    Self,
-    Tuple,
-    TypeVar,
-)
+from typing import Any, Callable, Optional, Self, Tuple, TypeVar
 
 from pydantic.fields import FieldInfo, ModelField, Undefined
 
-from .express import BaseExpression, BoolExpression, FilterMixin
-from .operators import ArithmeticOperator, Operator
-from .typing import ABCField, ABCTable, is_nullable
+from ormantic.errors import FieldAttributeConflictError
+from ormantic.express import ArithmeticMixin, LoginMixin
+from ormantic.typing import ABCField, ABCTable, is_nullable
 
 SupportSort = TypeVar("SupportSort", bound=ABCField, covariant=True)
 
@@ -103,7 +94,7 @@ def Field(
 
     # autoincrement && (default_factory || default) It's not allowed
     if autoincrement and (default_factory is not None or default is not Undefined):
-        raise ValueError(
+        raise FieldAttributeConflictError(
             "cannot specify both autoincrement and default or default_factory"
         )
 
@@ -135,57 +126,6 @@ def Field(
     return field
 
 
-class ArithmeticExpression(FilterMixin):
-    if TYPE_CHECKING:
-        op: Operator
-
-    __slots__ = ("left", "op", "right")
-
-    def __init__(self, left, op, right):
-        self.left = left
-        self.op = op
-        self.right = right
-
-    def dict(self):
-        op = self.op.value if isinstance(self.op, Enum) else self.op
-        right = (
-            self.right.dict() if isinstance(self.right, BaseExpression) else self.right
-        )
-        return {str(self.left): {str(op): right}}
-
-    def __str__(self) -> str:
-        return f"ArithmeticExpression({self.left}, {self.op}, {self.right})"
-
-    def __eq__(self, value: Any) -> BoolExpression:
-        return BoolExpression(self.left, self.op, [self.right, value])
-
-    def __ne__(self, value: Any) -> BoolExpression:
-        return BoolExpression(self.left, self.op, [self.right, value])
-
-    def __hash__(self) -> int:
-        return id(self)
-
-
-class ArithmeticMixin:
-    def __add__(self, other: Any) -> ArithmeticExpression:
-        return ArithmeticExpression(self, ArithmeticOperator.add, other)
-
-    def __sub__(self, other: Any) -> ArithmeticExpression:
-        return ArithmeticExpression(self, ArithmeticOperator.sub, other)
-
-    def __mul__(self, other: Any) -> ArithmeticExpression:
-        return ArithmeticExpression(self, ArithmeticOperator.mul, other)
-
-    def __truediv__(self, other: Any) -> ArithmeticExpression:
-        return ArithmeticExpression(self, ArithmeticOperator.truediv, other)
-
-    def __floordiv__(self, other: Any) -> ArithmeticExpression:
-        return ArithmeticExpression(self, ArithmeticOperator.floordiv, other)
-
-    def __mod__(self, other: Any) -> ArithmeticExpression:
-        return ArithmeticExpression(self, ArithmeticOperator.mod, other)
-
-
 def asc(field: SupportSort) -> Tuple[SupportSort, bool]:
     """Sort by ascending `field`."""
     return (field, True)
@@ -211,11 +151,14 @@ class CountField(ABCField):
         self.field = field
 
     def __pos__(self) -> str:
-        return f"count({self.field})"
+        return f"count({+self.field})"
+
+    def __str__(self) -> str:
+        return f"count({+self.field})"
 
 
 class CountFieldMixin(ABCField):
-    def count(self) -> ABCField:
+    def count(self) -> CountField:
         return CountField(self)
 
 
@@ -233,7 +176,7 @@ class DistinctFieldMixin(ABCField):
 
 
 class FakeField(
-    FilterMixin,
+    LoginMixin,
     ArithmeticMixin,
     SortMixin,
     CountFieldMixin,
@@ -251,31 +194,23 @@ class FakeField(
 
 
 class FieldProxy(
-    FilterMixin,
+    LoginMixin,
     ArithmeticMixin,
     SortMixin,
     CountFieldMixin,
     DistinctFieldMixin,
     ABCField,
 ):
-    def __init__(self, pydantic_field: ModelField, orm_model: ABCTable) -> None:
-        self._pydantic_field = pydantic_field
-        self.table = orm_model
+    def __init__(self, pydantic_field: ModelField, table: ABCTable) -> None:
+        self.pydantic_field = pydantic_field
+        self.table = table
 
     def __pos__(self) -> str:
-        return self._pydantic_field.alias or self._pydantic_field.name
-
-    @property
-    def orm_model(self) -> ABCTable:
-        return self.table
-
-    @property
-    def pydantic_field(self) -> ModelField:
-        return self._pydantic_field
+        return self.pydantic_field.alias or self.pydantic_field.name
 
     @property
     def required(self):
-        return self._pydantic_field.required
+        return self.pydantic_field.required
 
     @property
     def nullable(self) -> bool:
@@ -284,7 +219,7 @@ class FieldProxy(
         Returns:
             Optional[Callable[..., Any]]: nullable
         """
-        _type = self.table.__annotations__.get(self._pydantic_field.name)
+        _type = self.table.__annotations__.get(self.pydantic_field.name)
         return is_nullable(_type)
 
     @property
@@ -294,7 +229,7 @@ class FieldProxy(
         Returns:
             Optional[Callable[..., Any]]: primary
         """
-        return self._pydantic_field.field_info.extra.get("primary", False)
+        return self.pydantic_field.field_info.extra.get("primary", False)
 
     @property
     def autoincrement(self) -> bool:
@@ -303,7 +238,7 @@ class FieldProxy(
         Returns:
             Optional[Callable[..., Any]]: autoincrement
         """
-        return self._pydantic_field.field_info.extra.get("autoincrement", False)
+        return self.pydantic_field.field_info.extra.get("autoincrement", False)
 
     @property
     def update_factory(self) -> Optional[Callable[..., Any]]:
@@ -312,17 +247,17 @@ class FieldProxy(
         Returns:
             Optional[Callable[..., Any]]: update_factory
         """
-        return self._pydantic_field.field_info.extra.get("update_factory", None)
+        return self.pydantic_field.field_info.extra.get("update_factory", None)
 
     @property
     def default_factory(self):
-        return self._pydantic_field.default_factory
+        return self.pydantic_field.default_factory
 
     def __str__(self) -> str:
-        return f"{+self.orm_model}.{+self}"
+        return f"{+self.table}.{+self}"
 
     def __repr__(self) -> str:
-        return f"FieldProxy(name='{+self}', table='{+self.orm_model}')"
+        return f"FieldProxy(name='{+self}', table='{+self.table}')"
 
     def __hash__(self) -> int:
         return hash(str(self))

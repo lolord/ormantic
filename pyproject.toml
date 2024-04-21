@@ -39,13 +39,14 @@ dependencies = ["pydantic~=1.10"]
 
 [project.optional-dependencies]
 optional = ["aiomysql>=0.2.0", "loguru==0.7.2"]
+
 [tool.coverage.run]
 branch = true
-omit = ["ormantic/schemas.py"]
+omit = []
 
 
 [tool.coverage.report]
-include = ["ormantic/*", "tests/*"]
+include = ["ormantic/*"]
 
 omit = ["**/conftest.py"]
 exclude_lines = [
@@ -54,6 +55,10 @@ exclude_lines = [
     "@pytest.mark.skip",
     "def __repr__.*",
     "def __copy__.*",
+    "def __str__.*",
+    "def __hash__.*",
+    "def __pos__.*",
+    "raise NotImplementedError",
 ]
 
 
@@ -78,3 +83,7 @@ reportIncompatibleMethodOverride = false
 [tool.codespell]
 skip = '.git,env*'
 ignore-words-list = 'nin,NIN'
+
+
+[tool.pytest.ini_options]
+markers = ["orm: mark a test orm."]

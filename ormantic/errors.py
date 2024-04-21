@@ -3,7 +3,6 @@ https://peps.python.org/pep-0249/#exceptions
 """
 from pydantic import ValidationError
 
-
 ORMValidationError = ValidationError
 
 
@@ -19,6 +18,18 @@ class PrimaryKeyModifyError(ORMError):
     ...
 
 
+class FieldNotFoundError(ORMError):
+    ...
+
+
+class FieldAttributeConflictError(ORMError):
+    ...
+
+
+class AutoIncrementFieldExists(ORMError):
+    ...
+
+
 class IntegrityError(ORMError):
     """Exception raised when the relational integrity of the database is affected."""
 
@@ -28,4 +39,16 @@ class NotSupportedError(ORMError):
 
 
 class ForeignKeyValidationError(ORMError):
+    ...
+
+
+class PredicateEncodeError(ORMError):
+    ...
+
+
+class OperatorUnregisteredError(ORMError):
+    ...
+
+
+class RowNotFoundError(ORMError):
     ...

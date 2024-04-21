@@ -1,246 +1,281 @@
 import re
-from abc import abstractmethod
-from typing import Any, Dict, Iterable, List, Union, cast
+from typing import Any, Iterable, TypeAlias, Union, final
 
-from .operators import BooleanOperator, LogicOperator, Operator
+from ormantic.errors import PredicateEncodeError
+from ormantic.operators import ArithmeticOperator, LogicOperator, Operator
+
+PredicateAny: TypeAlias = Union["Predicate", Any]
 
 
-class Predicate:
-    def __init__(self, operator: Operator, value: Union["Predicate", Any]) -> None:
+@final
+class Func:
+    @staticmethod
+    def and_(*elements: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.AND, elements)
+
+    @staticmethod
+    def or_(*elements: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.OR, elements)
+
+    @staticmethod
+    def eq(expr: PredicateAny, value: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.eq, [expr, value])
+
+    @staticmethod
+    def ne(expr: PredicateAny, value: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.ne, [expr, value])
+
+    @staticmethod
+    def gt(expr: PredicateAny, value: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.gt, [expr, value])
+
+    @staticmethod
+    def gte(expr: PredicateAny, value: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.gte, [expr, value])
+
+    @staticmethod
+    def lt(expr: PredicateAny, value: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.lt, [expr, value])
+
+    @staticmethod
+    def lte(expr: PredicateAny, value: PredicateAny) -> "Predicate":
+        return Predicate(LogicOperator.lte, [expr, value])
+
+    @staticmethod
+    def in_(expr: PredicateAny, sequence: Iterable) -> "Predicate":
+        return Predicate(LogicOperator.IN, [expr, tuple(sequence)])
+
+    @staticmethod
+    def nin(expr: PredicateAny, sequence: Iterable) -> "Predicate":
+        return Predicate(LogicOperator.NIN, [expr, tuple(sequence)])
+
+    @staticmethod
+    def match(expr: PredicateAny, pattern: Union[re.Pattern, str]) -> "Predicate":
+        return Predicate(LogicOperator.REGEX, [expr, pattern])
+
+    @staticmethod
+    def add(left: PredicateAny, right: PredicateAny) -> "Predicate":
+        return Predicate(ArithmeticOperator.add, [left, right])
+
+    @staticmethod
+    def sub(left: PredicateAny, right: PredicateAny) -> "Predicate":
+        return Predicate(ArithmeticOperator.sub, [left, right])
+
+    @staticmethod
+    def mul(left: PredicateAny, right: PredicateAny) -> "Predicate":
+        return Predicate(ArithmeticOperator.mul, [left, right])
+
+    @staticmethod
+    def truediv(left: PredicateAny, right: PredicateAny) -> "Predicate":
+        return Predicate(ArithmeticOperator.truediv, [left, right])
+
+    @staticmethod
+    def floordiv(left: PredicateAny, right: PredicateAny) -> "Predicate":
+        return Predicate(ArithmeticOperator.floordiv, [left, right])
+
+    @staticmethod
+    def mod(left: PredicateAny, right: PredicateAny) -> "Predicate":
+        return Predicate(ArithmeticOperator.mod, [left, right])
+
+
+class ArithmeticMixin:
+    def __add__(self, other: Any) -> "Predicate":
+        return self.add(other)
+
+    def __sub__(self, other: Any) -> "Predicate":
+        return self.sub(other)
+
+    def __mul__(self, other: Any) -> "Predicate":
+        return self.mul(other)
+
+    def __truediv__(self, other: Any) -> "Predicate":
+        return self.truediv(other)
+
+    def __floordiv__(self, other: Any) -> "Predicate":
+        return self.floordiv(other)
+
+    def __mod__(self, other: Any) -> "Predicate":
+        return self.mod(other)
+
+    def add(self, other: Any) -> "Predicate":
+        return Func.add(self, other)
+
+    def sub(self, other: Any) -> "Predicate":
+        return Func.sub(self, other)
+
+    def mul(self, other: Any) -> "Predicate":
+        return Func.mul(self, other)
+
+    def truediv(self, other: Any) -> "Predicate":
+        return Func.truediv(self, other)
+
+    def floordiv(self, other: Any) -> "Predicate":
+        return Func.floordiv(self, other)
+
+    def mod(self, other: Any) -> "Predicate":
+        return Func.mod(self, other)
+
+
+class LoginMixin:
+    def __gt__(self, value: Any) -> "Predicate":
+        return self.gt(value)
+
+    def __ge__(self, value: Any) -> "Predicate":
+        return self.gte(value)
+
+    def __lt__(self, value: Any) -> "Predicate":
+        return self.lt(value)
+
+    def __le__(self, value: Any) -> "Predicate":
+        return self.lte(value)
+
+    def __eq__(self, value: Any) -> "Predicate":
+        return self.eq(value)
+
+    def __ne__(self, value: Any) -> "Predicate":
+        return self.ne(value)
+
+    def __or__(self, other: Any) -> "Predicate":
+        return self.or_(other)
+
+    def __and__(self, other: Any) -> "Predicate":
+        return self.and_(other)
+
+    def gt(self, value: Any) -> "Predicate":
+        return Func.gt(self, value)
+
+    def gte(self, value: Any) -> "Predicate":
+        return Func.gte(self, value)
+
+    def lte(self, value: Any) -> "Predicate":
+        return Func.lte(self, value)
+
+    def lt(self, value: Any) -> "Predicate":
+        return Func.lt(self, value)
+
+    def eq(self, value: Any) -> "Predicate":
+        return Func.eq(self, value)
+
+    def ne(self, value: Any) -> "Predicate":
+        return Func.ne(self, value)
+
+    def in_(self, value: Iterable) -> "Predicate":
+        return Func.in_(self, value)
+
+    def nin(self, value: Iterable) -> "Predicate":
+        return Func.nin(self, value)
+
+    def or_(self, value: Any) -> "Predicate":
+        return Func.or_(self, value)
+
+    def and_(self, value: Any) -> "Predicate":
+        return Func.and_(self, value)
+
+
+class Predicate(LoginMixin, ArithmeticMixin):
+    def __init__(self, operator: Operator, values: list | tuple) -> None:
+        _values = []
+        for i in values:
+            if (
+                isinstance(i, Predicate)
+                and operator == i.operator
+                and len(i.values) > 1
+            ):
+                _values.extend(i.values)
+            else:
+                _values.append(i)
         self.operator = operator
-        self.value = value
+        self.values = _values
 
     def dict(self) -> dict:
-        return decode(self)
-
-    def __or__(self, other: "BoolExpression") -> "Predicate":
-        return Predicate(LogicOperator.OR, [self, other])
-
-    def __and__(self, other: "BoolExpression") -> "Predicate":
-        return Predicate(LogicOperator.AND, [self, other])
+        return {
+            str(self.operator): [
+                v.dict() if isinstance(v, Predicate) else v for v in self.values
+            ]
+        }
 
     def __str__(self) -> str:
-        return f"Predicate({self.operator},{str(self.value)})"
+        return f"Predicate({self.operator},{str(self.values)})"
 
 
-class BaseExpression:
-    __slots__ = ("left", "predicates")
-
-    predicates: List[Predicate]
-
-    def __init__(self, /, left=None, operator=None, value=None, *, predicates=None):
-        self.left = left
-        self.predicates = []
-        if operator:
-            self.predicates.append(Predicate(operator, value))
-        if predicates:
-            self.predicates.extend(predicates)
-
-    @abstractmethod
-    def dict(self) -> dict:
-        ...
-
-    def __hash__(self):
-        return id(self)
-
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.left},{self.predicates})"
-
-    def __str__(self) -> str:
-        return f"{self.__class__.__name__}({self.left},{self.predicates})"
+def check_predicate(obj: Any):
+    if isinstance(obj, dict):
+        if all((i in Operator) for i in obj):
+            return True
+        elif all(check_predicate(v) for v in obj.values()):
+            return True
+    return False
 
 
-class BoolExpression(BaseExpression):
-    def dict(self) -> dict:
-        return decode(self)
-
-    def __or__(self, other: "BoolExpression") -> Predicate:
-        return Predicate(LogicOperator.OR, [self, other])
-
-    def __and__(self, other: "BoolExpression") -> Predicate:
-        return Predicate(LogicOperator.AND, [self, other])
+def validate_predicate_value(v: Any) -> Predicate | Any:
+    return encode(v) if check_predicate(v) else v
 
 
-QueryExpression = Union[BoolExpression, Predicate, Dict]
-
-
-def check_predicate(obj: dict):
-    return isinstance(obj, dict) and any((i in Operator) for i in obj)
-
-
-def encode_expression(obj: Any) -> Union[BoolExpression, Predicate]:
+def encode(obj: Any) -> Predicate:
     if isinstance(obj, Predicate):
-        return obj
-    if isinstance(obj, BoolExpression):
         return obj
 
     if isinstance(obj, (list, tuple)):
-        return and_(*[encode_expression(i) for i in obj])
+        return Func.and_(*[encode(i) for i in obj])
 
     if isinstance(obj, dict):
+        if len(obj) > 1:
+            return encode(list(map(dict, zip(obj.items()))))
+
         express = []
-        for k, v in obj.items():
-            op = Operator.validate(k)
-            if op:
-                if op is LogicOperator.AND:  # v is sequence
-                    express.extend(encode_expression(i) for i in v)
-                elif op is LogicOperator.OR:  # v is sequence
-                    express.append(or_(*[encode_expression(i) for i in v]))
+
+        field, value = obj.popitem()
+        op = Operator.validate(field)
+        if op:
+            if op is LogicOperator.AND:  # v is sequence
+                express.extend(encode(i) for i in value)
+            elif op is LogicOperator.OR:  # v is sequence
+                express.append(Func.or_(*[encode(i) for i in value]))
+            elif op in ArithmeticOperator:
+                f, v = value
+                if isinstance(v, list):
+                    assert len(v) == 2
+                    e = Predicate(
+                        op,
+                        [f, validate_predicate_value(v[0])],
+                    )
+                    express.append(
+                        Predicate(
+                            LogicOperator.eq,
+                            [e, validate_predicate_value(v[1])],
+                        )
+                    )
                 else:
-                    # express.append(BoolExpression(k, op, v))
-                    raise ValueError(f"{obj}")
-
-            elif check_predicate(v):
-                # {field: {$not: {$gt: 1}}}
-                expr = BoolExpression(k)
-                for op, right in v.items():
-                    op = Operator(op)
-                    assert op not in LogicOperator
-                    if check_predicate(right):
-                        expr.predicates.append(Predicate(op, encode_expression(right)))
-                    else:
-                        expr.predicates.append(Predicate(op, right))
-
-                express.append(expr)
+                    express.append(
+                        Predicate(
+                            op,
+                            [f, validate_predicate_value(v)],
+                        )
+                    )
             else:
-                express.append(BoolExpression(k, BooleanOperator.eq, v))
-
-        return express[0] if len(express) == 1 else and_(*express)
-
-    raise ValueError(f"{obj} is not BoolExpression")
-
-
-def decode(expr: Union[BoolExpression, Predicate]) -> dict[str, Any]:
-    if isinstance(expr, BoolExpression):
-        predicates = {}
-        for p in expr.predicates:
-            predicates.update(decode(p))
-        return {str(expr.left): predicates}
-
-    elif isinstance(expr, Predicate):
-        if expr.operator is LogicOperator.AND:
-            data = {}
-            for sub in cast(list[BoolExpression], expr.value):
-                for k, v in decode(sub).items():
-                    if k in data:
-                        data[k].update(v)
-                    else:
-                        data[k] = v
-            return data
-        elif expr.operator is LogicOperator.OR:
-            values = []
-            for sub in cast(list[BoolExpression], expr.value):
-                if isinstance(sub, Predicate) and sub.operator is LogicOperator.OR:
-                    values.extend(decode(sub)[str(LogicOperator.OR)])
+                if isinstance(value, list):
+                    express.append(
+                        Predicate(
+                            op,
+                            [validate_predicate_value(i) for i in value],
+                        )
+                    )
                 else:
-                    values.append(decode(sub))
-            return {str(expr.operator): values}
+                    express.append(
+                        Predicate(
+                            op,
+                            [validate_predicate_value(value)],
+                        )
+                    )
+
+        elif check_predicate(value):
+            # {field: {$not: {$gt: 1}}}
+            for k, v in value.items():
+                e = encode({k: [field, v]})
+                express.append(e)
         else:
-            if isinstance(expr.value, Predicate):
-                return {str(expr.operator): decode(expr.value)}
-            else:
-                return {str(expr.operator): expr.value}
+            express.append(Predicate(LogicOperator.eq, [field, value]))
 
-    raise TypeError(f"{type(expr)} is not in [BoolExpression, Predicate]")
+        return express[0] if len(express) == 1 else Func.and_(*express)
 
-
-def and_(*elements: QueryExpression) -> Predicate:
-    """Logical **AND** operation between multiple `BoolExpression` objects."""
-    return Predicate(LogicOperator.AND, elements)
-
-
-def or_(*elements: QueryExpression) -> Predicate:
-    """Logical **OR** operation between multiple `BoolExpression` objects."""
-    return Predicate(LogicOperator.OR, elements)
-
-
-def eq(expr: BaseExpression, value: Any) -> BoolExpression:
-    """Equality comparison operator."""
-    return BoolExpression(expr, BooleanOperator.eq, value)
-
-
-def ne(expr: BaseExpression, value: Any) -> BoolExpression:
-    """Inequality comparison operator (includes documents not containing the expr)."""
-    return BoolExpression(expr, BooleanOperator.ne, value)
-
-
-def gt(expr: BaseExpression, value: Any) -> BoolExpression:
-    """Greater than (strict) comparison operator (i.e. >)."""
-    return BoolExpression(expr, BooleanOperator.gt, value)
-
-
-def gte(expr: BaseExpression, value: Any) -> BoolExpression:
-    """Greater than or equal comparison operator (i.e. >=)."""
-    return BoolExpression(expr, BooleanOperator.gte, value)
-
-
-def lt(expr: BaseExpression, value: Any) -> BoolExpression:
-    """Less than (strict) comparison operator (i.e. <)."""
-    return BoolExpression(expr, BooleanOperator.lt, value)
-
-
-def lte(expr: BaseExpression, value: Any) -> BoolExpression:
-    """Less than or equal comparison operator (i.e. <=)."""
-    return BoolExpression(expr, BooleanOperator.lte, value)
-
-
-def in_(expr: Any, sequence: Iterable) -> BoolExpression:
-    """Select instances where `expr` is contained in `sequence`."""
-    return BoolExpression(expr, BooleanOperator.IN, sequence)
-
-
-def nin(expr: Any, sequence: Iterable) -> BoolExpression:
-    """Select instances where `expr` is **not** contained in `sequence`."""
-    return BoolExpression(expr, BooleanOperator.NIN, sequence)
-
-
-def match(expr: BaseExpression, pattern: Union[re.Pattern, str]) -> BoolExpression:
-    if isinstance(pattern, str):
-        r = re.compile(pattern)
-    else:
-        r = pattern
-    return BoolExpression({expr: r})
-
-
-class FilterMixin:
-    def __gt__(self, value: Any) -> BoolExpression:
-        return self.gt(value)
-
-    def gt(self, value: Any) -> BoolExpression:
-        return BoolExpression(self, BooleanOperator.gt, value)
-
-    def gte(self, value: Any) -> BoolExpression:
-        return BoolExpression(self, BooleanOperator.gte, value)
-
-    def __ge__(self, value: Any) -> BoolExpression:
-        return self.gte(value)
-
-    def lt(self, value: Any) -> BoolExpression:
-        return BoolExpression(self, BooleanOperator.lt, value)
-
-    def __lt__(self, value: Any) -> BoolExpression:
-        return self.lt(value)
-
-    def lte(self, value: Any) -> BoolExpression:
-        return BoolExpression(self, BooleanOperator.lte, value)
-
-    def __le__(self, value: Any) -> BoolExpression:
-        return self.lte(value)
-
-    def eq(self, value: Any) -> BoolExpression:
-        return BoolExpression(self, BooleanOperator.eq, value)
-
-    def __eq__(self, value: Any) -> BoolExpression:
-        return self.eq(value)
-
-    def ne(self, value: Any) -> BoolExpression:
-        return BoolExpression(self, BooleanOperator.ne, value)
-
-    def __ne__(self, value: Any) -> BoolExpression:  # type, ignore
-        return self.ne(value)
-
-    def in_(self, value: Iterable, strict=False) -> BoolExpression:
-        return in_(self, value)
-
-    def nin(self, value: Iterable, strict=False) -> BoolExpression:
-        return nin(self, value)
+    raise PredicateEncodeError(str(obj))  # pragma: no cover

@@ -53,6 +53,19 @@ testcov: test
 	@pdm run coverage lcov
 
 
+.PHONY: testorm
+testorm: .pdm
+	pdm run coverage run -m pytest -k orm
+
+.PHONY: testcovorm
+testcovorm: testorm
+	@echo "building coverage html"
+	@pdm run coverage html
+	@echo "building coverage lcov"
+	@pdm run coverage lcov
+
+
+
 .PHONY: all  ## Run the standard set of checks performed in CI
 all: lint typecheck codespell testcov
 
