@@ -1,23 +1,20 @@
-from asyncio.events import AbstractEventLoop
-from contextlib import AbstractAsyncContextManager
 from typing import (
     Any,
-    AsyncGenerator,
-    AsyncIterable,
-    Awaitable,
-    Generator,
+    ContextManager,
     List,
     Literal,
     Optional,
     Tuple,
     Type,
+    TypeAlias,
     Union,
     cast,
 )
 
-import aiomysql
-from aiomysql import Connection, Pool
-from aiomysql.cursors import DictCursor
+import pymysql
+from dbutils.pooled_db import PooledDB, PooledDedicatedDBConnection
+from pymysql import Connect as PyMySQLConnection
+from pymysql.cursors import DictCursor
 
 from ormantic.dialects.mysql.query import sql_params
 from ormantic.errors import RowNotFoundError
@@ -28,128 +25,98 @@ from ormantic.query import Delete, Query
 from ormantic.typing import ABCField, ABCQuery
 from ormantic.utils import logger
 
-
-async def create_client(
-    *,
-    host: str = "127.0.0.1",
-    port: int = 3306,
-    user: Optional[str] = None,
-    password: str = "",
-    db: Optional[str] = None,
-    minsize=1,
-    maxsize=10,
-    echo=False,
-    pool_recycle=-1,
-    loop: Optional[AbstractEventLoop] = None,
-    autocommit=False,
-    connect_timeout: Optional[float] = None,
-    charset: str = "",
-    **kwargs: Any,
-):
-    pool = await aiomysql.create_pool(
-        host=host,
-        port=port,
-        user=user,
-        password=password,
-        db=db,
-        minsize=minsize,
-        maxsize=maxsize,
-        echo=echo,
-        pool_recycle=pool_recycle,
-        loop=loop,
-        autocommit=autocommit,
-        connect_timeout=connect_timeout,
-        charset=charset,
-        **kwargs,
-    )
-    return AsyncClient(pool)
+Connection: TypeAlias = PooledDedicatedDBConnection
 
 
-class AsyncClient(AbstractAsyncContextManager):
-    def __init__(self, pool: Pool):
-        self.pool = pool
-
-    async def __aexit__(self, exc_type, exc_value, traceback):
-        await self.close()
-
-    async def close(self):
-        self.pool.close()
-        await self.pool.wait_closed()
-
-    async def release(self, conn: Connection):
-        await self.pool.release(conn)
-
-    async def session(self) -> "Session":
-        conn = await self.pool._acquire()
-        return Session(conn, self)
-
-
-class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
-    """This AIOCursor object support multiple async operations:
-
-    - **async for**: asynchronously iterate over the query results
-    - **await** : when awaited it will return a list of the fetched models
-    """
+class Database:
+    dbapi = pymysql
 
     def __init__(
-        self, session: "Session", model: Type[ModelType], query: Query[ModelType]
+        self,
+        user=None,  # The first four arguments is based on DB-API 2.0 recommendation.
+        password="",
+        host=None,
+        database=None,
+        port=0,
+        **kwargs,
+    ) -> None:
+        self.user = user
+        self.password = password
+        self.host = host
+        self.database = database
+        self.port = port
+        self.kwargs = kwargs
+
+    def __call__(
+        self,
+    ) -> PyMySQLConnection:
+        return PyMySQLConnection(
+            user=self.user,
+            password=self.password,
+            host=self.host,
+            database=self.database,
+            port=self.port,
+            **self.kwargs,
+        )
+
+
+class Client(ContextManager):
+    def __init__(
+        self,
+        db: Database,
+        mincached=0,
+        maxcached=0,
+        maxshared=0,
+        maxconnections=0,
+        blocking=False,
+        maxusage=None,
+        setsession=None,
+        reset=True,
+        failures=None,
+        ping=1,
+        *args,
+        **kwargs,
     ):
-        super().__init__()
-        self.session = session
-        self.model = model
-        self.cursor: Optional[DictCursor] = None
-        self.query: Query[ModelType] = query
-        self.results: Optional[List[ModelType]] = None
+        self.pool = PooledDB(
+            db,
+            mincached=mincached,
+            maxcached=maxcached,
+            maxshared=maxshared,
+            maxconnections=maxconnections,
+            blocking=blocking,
+            maxusage=maxusage,
+            setsession=setsession,
+            reset=reset,
+            failures=failures,
+            ping=ping,
+            *args,
+            **kwargs,
+        )
 
-    def __await__(self) -> Generator[None, None, List[ModelType]]:
-        if self.results is not None:
-            return self.results
+    def __exit__(self, exc_type, exc_value, traceback):
+        self.close()
 
-        self.cursor = yield from self.session.execute(
-            self.query, DictCursor
-        ).__await__()
-        rows = yield from self.cursor.fetchall().__await__()
-        instances = []
-        for row in rows:
-            instances.append(self.model.validate_row(row))
-            yield
-        self.results = instances
-        return instances
+    def close(self):
+        self.pool.close()
 
-    async def __aiter__(self) -> AsyncGenerator[ModelType, None]:
-        if self.results is not None:
-            for res in self.results:
-                yield res
-            return
-
-        results = []
-        self.cursor = await self.session.execute(self.query, DictCursor)
-        rows = await self.cursor.fetchall()
-        for row in rows:
-            instance = self.model.validate_row(row)
-            results.append(instance)
-            yield instance
-        self.results = results
+    def session(self) -> "Session":
+        conn = cast(Connection, self.pool.dedicated_connection())
+        return Session(conn)
 
 
-class Session(AbstractAsyncContextManager):
+class Session(ContextManager):
     """The Session object is responsible for handling database operations with MySQL
     in an asynchronous way using aiomysql.
     """
 
-    def __init__(self, connection: Connection, client: AsyncClient) -> None:
+    def __init__(self, connection: Connection) -> None:
         self.connection: Connection = connection
-        self.client: AsyncClient = client
 
-    async def __aexit__(self, exc_type, exc, tb):
-        await self.close()
+    def __exit__(self, exc_type, exc, tb):
+        self.close()
 
-    async def close(self):
-        try:
-            await self.client.release(self.connection)
-        finally:
-            self.pool = None  # type: ignore
-            self.connection = None  # type: ignore
+    def close(self):
+        self.connection.close()
 
     def find(
         self,
@@ -158,27 +125,15 @@ class Session(AbstractAsyncContextManager):
         sorts: List[Tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
-    ) -> AIOCursor[ModelType]:
-        """Search for Model instances matching the query filter provided
-
-        Args:
-            model: orm model
-            *filters: query filters
-            sorts: sort expression
-            offset: number of row to skip
-            rows: maximum number of instance fetched
-
-        Raises:
-            RowParsingError: unable to parse the resulting row
-
-        Returns:
-            [ormantic.session.AIOCursor][] of the query
-
-        """
+    ) -> List[ModelType]:
         query = Query(model, filters=filters, offset=offset, rows=rows, sorts=sorts)
-        return AIOCursor(self, model, query)
+        results = []
+        cursor = self.execute(query, DictCursor)
+        for row in cursor.fetchall():
+            results.append(model.validate(row))
+        return results
 
-    async def find_one(
+    def find_one(
         self,
         model: Type[ModelType],
         *filters: Predicate,
@@ -198,11 +153,11 @@ class Session(AbstractAsyncContextManager):
             the fetched instance if found otherwise None
 
         """
-        async for i in self.find(model, *filters, sorts=sorts, offset=0, rows=1):
+        for i in self.find(model, *filters, sorts=sorts, offset=0, rows=1):
             return i
         return None
 
-    async def count(
+    def count(
         self,
         model: Type[ModelType],
         field: Union[ABCField, Literal[1, "*"]] = "*",
@@ -219,11 +174,11 @@ class Session(AbstractAsyncContextManager):
             int: number of row matching the query
         """
         query = Query(model, filters=filters).count(field)
-        cursor = await self.execute(query)
-        (result,) = await cursor.fetchone()
+        cursor = self.execute(query)
+        (result,) = cursor.fetchone()
         return cast(int, result)
 
-    async def distinct(
+    def distinct(
         self,
         model: Type[ModelType],
         field: FieldProxy,
@@ -240,11 +195,11 @@ class Session(AbstractAsyncContextManager):
             List[Any]: _description_
         """
         query = Query(model, filters=filters, sorts=sorts).distinct(field)
-        cursor = await self.execute(query)
-        data = await cursor.fetchall()
+        cursor = self.execute(query)
+        data = cursor.fetchall()
         return [i for (i, _) in data]
 
-    async def save(self, instance: ModelType) -> ModelType:
+    def save(self, instance: ModelType) -> ModelType:
         """Persist an instance to the database
 
         Args:
@@ -252,23 +207,23 @@ class Session(AbstractAsyncContextManager):
         """
         if not instance.__fields_set__:
             return instance
-        cursor = await self.execute(instance)
+        cursor = self.execute(instance)
         id = cursor.lastrowid
         if id is not None:
             logger.info(f"lastrowid: {id}")
             instance.set_auto_increment(id)
         return instance
 
-    async def save_all(self, instances: List[ModelType]):
+    def save_all(self, instances: List[ModelType]):
         for i in instances:
-            await self.save(i)
+            self.save(i)
         return instances
 
-    async def delete(self, query: Delete) -> int:
-        cursor = await self.execute(query)
+    def delete(self, query: Delete) -> int:
+        cursor = self.execute(query)
         return cursor.rowcount
 
-    async def remove(self, instance: ModelType) -> ModelType:
+    def remove(self, instance: ModelType) -> ModelType:
         """Remove an instance from the database
 
         Args:
@@ -278,23 +233,21 @@ class Session(AbstractAsyncContextManager):
             RowNotFoundError: the instance has not been persisted to the database
         """
 
-        count = await self.execute(
-            Delete(type(instance), [instance.dict(primary_keys=True)])
-        )
+        count = self.execute(Delete(type(instance), [instance.dict(primary_keys=True)]))
         if count == 0:
             raise RowNotFoundError
         return instance
 
-    async def execute(self, query: ABCQuery | ModelType | str, *cursors) -> Any:
+    def execute(self, query: ABCQuery | ModelType | str, *cursors) -> Any:
         sql, params = sql_params(query)
         logger.info(f"sql_params: {sql}, {params}")
-        async with self.connection.cursor(*cursors) as cur:
-            await cur.execute(sql, params)
-            return cur
-        # return await cursor.fetchall()
+        cur = self.connection.cursor(*cursors)
+        cur.execute(sql, params)
+        return cur
+        # return cursor.fetchall()
 
-    async def commit(self) -> None:
+    def commit(self) -> None:
         try:
-            await self.connection.commit()
+            self.connection.commit()
         finally:
-            await self.connection.rollback()
+            self.connection.rollback()
