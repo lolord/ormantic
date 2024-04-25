@@ -157,7 +157,7 @@ class Query(
         self,
         table: Type[ModelType],
         fields: Sequence[Union[str, ABCField]] = [],
-        filters: Sequence[Union[Predicate, Dict]] = [],
+        filters: Sequence[Union[Predicate, Dict, bool]] = [],
         offset: int | None = None,
         rows: int | None = None,
         sorts: SupportExpress = [],

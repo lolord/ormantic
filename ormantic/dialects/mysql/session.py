@@ -14,7 +14,7 @@ from typing import (
 import pymysql
 from dbutils.pooled_db import PooledDB, PooledDedicatedDBConnection
 from pymysql import Connect as PyMySQLConnection
-from pymysql.cursors import DictCursor
+from pymysql.cursors import Cursor, DictCursor
 
 from ormantic.dialects.mysql.query import sql_params
 from ormantic.errors import RowNotFoundError
@@ -28,7 +28,7 @@ from ormantic.utils import logger
 Connection: TypeAlias = PooledDedicatedDBConnection
 
 
-class Database:
+class ConnectFactory:
     dbapi = pymysql
 
     def __init__(
@@ -37,7 +37,7 @@ class Database:
         password="",
         host=None,
         database=None,
-        port=0,
+        port=3306,
         **kwargs,
     ) -> None:
         self.user = user
@@ -63,7 +63,7 @@ class Database:
 class Client(ContextManager):
     def __init__(
         self,
-        db: Database,
+        db: ConnectFactory,
         mincached=0,
         maxcached=0,
         maxshared=0,
@@ -121,7 +121,7 @@ class Session(ContextManager):
     def find(
         self,
         model: Type[ModelType],
-        *filters: Predicate,
+        *filters: Predicate | bool,
         sorts: List[Tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
@@ -136,7 +136,7 @@ class Session(ContextManager):
     def find_one(
         self,
         model: Type[ModelType],
-        *filters: Predicate,
+        *filters: Predicate | bool,
         sorts: List[Tuple[SupportSort, bool]] = [],
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
@@ -197,7 +197,7 @@ class Session(ContextManager):
         query = Query(model, filters=filters, sorts=sorts).distinct(field)
         cursor = self.execute(query)
         data = cursor.fetchall()
-        return [i for (i, _) in data]
+        return [i for (i,) in data]
 
     def save(self, instance: ModelType) -> ModelType:
         """Persist an instance to the database
@@ -238,7 +238,7 @@ class Session(ContextManager):
             raise RowNotFoundError
         return instance
 
-    def execute(self, query: ABCQuery | ModelType | str, *cursors) -> Any:
+    def execute(self, query: ABCQuery | ModelType | str, *cursors: Type[Cursor]) -> Any:  # type: ignore
         sql, params = sql_params(query)
         logger.info(f"sql_params: {sql}, {params}")
         cur = self.connection.cursor(*cursors)

@@ -17,7 +17,7 @@ from typing import (
 
 import aiomysql
 from aiomysql import Connection, Pool
-from aiomysql.cursors import DictCursor
+from aiomysql.cursors import Cursor, DictCursor
 
 from ormantic.dialects.mysql.query import sql_params
 from ormantic.errors import RowNotFoundError
@@ -62,10 +62,10 @@ async def create_client(
         charset=charset,
         **kwargs,
     )
-    return AsyncClient(pool)
+    return AIOClient(pool)
 
 
-class AsyncClient(AbstractAsyncContextManager):
+class AIOClient(AbstractAsyncContextManager):
     def __init__(self, pool: Pool):
         self.pool = pool
 
@@ -79,9 +79,11 @@ class AsyncClient(AbstractAsyncContextManager):
     async def release(self, conn: Connection):
         await self.pool.release(conn)
 
-    async def session(self) -> "Session":
-        conn = await self.pool._acquire()
-        return Session(conn, self)
+    def session(self) -> "AIOSession":
+        return AIOSession(self)
+
+    async def connection(self):
+        return await self.pool.acquire()
 
 
 class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
@@ -92,7 +94,7 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
     """
 
     def __init__(
-        self, session: "Session", model: Type[ModelType], query: Query[ModelType]
+        self, session: "AIOSession", model: Type[ModelType], query: Query[ModelType]
     ):
         super().__init__()
         self.session = session
@@ -132,16 +134,32 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
         self.results = results
 
 
-class Session(AbstractAsyncContextManager):
+class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
     """The Session object is responsible for handling database operations with MySQL
     in an asynchronous way using aiomysql.
     """
 
-    def __init__(self, connection: Connection, client: AsyncClient) -> None:
-        self.connection: Connection = connection
-        self.client: AsyncClient = client
+    def __init__(self, client: AIOClient, autocommit: bool = False) -> None:
+        self._connection: Connection | None = None
+        self.client: AIOClient = client
+        self.autocommit = autocommit
+
+    @property
+    def connection(self) -> Connection:
+        return cast(Connection, self._connection)
+
+    def __await__(self) -> Generator[Any, Any, "AIOSession"]:
+        yield from self.__aenter__().__await__()
+        return self
+
+    async def __aenter__(self):
+        if self._connection is None:
+            self._connection = await self.client.connection()
+        return self
 
     async def __aexit__(self, exc_type, exc, tb):
+        if self.autocommit is True:
+            await self.commit()
         await self.close()
 
     async def close(self):
@@ -149,12 +167,12 @@ class Session(AbstractAsyncContextManager):
             await self.client.release(self.connection)
         finally:
             self.pool = None  # type: ignore
-            self.connection = None  # type: ignore
+            self._connection = None  # type: ignore
 
     def find(
         self,
         model: Type[ModelType],
-        *filters: Predicate,
+        *filters: Union[Predicate, bool],
         sorts: List[Tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
@@ -181,7 +199,7 @@ class Session(AbstractAsyncContextManager):
     async def find_one(
         self,
         model: Type[ModelType],
-        *filters: Predicate,
+        *filters: Union[Predicate, bool],
         sorts: List[Tuple[SupportSort, bool]] = [],
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
@@ -285,7 +303,11 @@ class Session(AbstractAsyncContextManager):
             raise RowNotFoundError
         return instance
 
-    async def execute(self, query: ABCQuery | ModelType | str, *cursors) -> Any:
+    async def execute(
+        self,
+        query: ABCQuery | ModelType | str,  # type: ignore
+        *cursors: Type[Cursor],
+    ) -> Any:
         sql, params = sql_params(query)
         logger.info(f"sql_params: {sql}, {params}")
         async with self.connection.cursor(*cursors) as cur:
