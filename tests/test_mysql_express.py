@@ -52,6 +52,15 @@ def test_mysql_lt():
     assert predicate_sql_params(expr) == ("`id` <= %s", [1])
 
 
+def test_mysql_in():
+    values = [1, 2, 3]
+    expr = encode(
+        {"id": {"$in": values}},
+    )
+
+    assert predicate_sql_params(expr) == ("`id` in %s", [tuple(values)])
+
+
 def test_mysql_like():
     expr = encode(
         [
@@ -102,6 +111,19 @@ def test_mysql_or():
     )
 
     assert predicate_sql_params(expr) == ("`id` < %s or `id` > %s", [1, 10])
+
+
+def test_mysql_null():
+    expr = encode(
+        {"id": None},
+    )
+    assert predicate_sql_params(expr) == ("`id` is null", [])
+
+    expr = encode(
+        {"id": {"$ne": None}},
+    )
+
+    assert predicate_sql_params(expr) == ("`id` is not null", [])
 
 
 def test_mysql_arithmetic():

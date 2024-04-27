@@ -157,7 +157,7 @@ class Query(
         self,
         table: Type[ModelType],
         fields: Sequence[Union[str, ABCField]] = [],
-        filters: Sequence[Union[Predicate, Dict]] = [],
+        filters: Sequence[Union[Predicate, Dict, bool]] = [],
         offset: int | None = None,
         rows: int | None = None,
         sorts: SupportExpress = [],
@@ -213,10 +213,11 @@ class Delete(ABCQuery, FilterMixin):
         return +self.table
 
 
-class Insert(ABCQuery[ModelType]):
+class Insert(ABCQuery[Type[ModelType]]):
     values: List[ModelType]
 
-    def __init__(self, values: List[ModelType]):
+    def __init__(self, table: Type[ModelType], values: List[ModelType]):
+        self.table = table
         self.values = [] if values is None else values
 
     def add(self, value: ModelType):

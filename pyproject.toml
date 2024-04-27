@@ -35,10 +35,11 @@ classifiers = [
 
 requires-python = ">=3.11"
 
-dependencies = ["pydantic~=1.10"]
+dependencies = ["pydantic~=1.10", "loguru>=0.7.2"]
 
 [project.optional-dependencies]
-optional = ["aiomysql>=0.2.0", "loguru==0.7.2"]
+aiomysql = ["aiomysql>=0.2.0"]
+mysql = ["PyMySQL==1.1.0", "DBUtils>=3.1.0"]
 
 [tool.coverage.run]
 branch = true

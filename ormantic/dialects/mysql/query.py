@@ -74,19 +74,22 @@ def mysql_predicate_tokens(expr: Any, sql: List[str], params: List):
                         sql.append(")")
                     sql.append(symbols[expr.operator])
                 sql.pop()
-            elif expr.operator in (LogicOperator.IN, LogicOperator.NIN):
+            elif (
+                expr.operator in (LogicOperator.eq, LogicOperator.ne)
+                and len(expr.values) == 2
+                and expr.values[1] is None
+            ):
                 mysql_predicate_tokens(expr.values[0], sql, params)
-                sql.append(symbols[expr.operator])
-                sql.append("(" + ",".join(str(i) for i in expr.values[1]) + ")")
-            elif expr.operator is LogicOperator.eq and expr.values is None:
-                sql.append("is null")
-            elif expr.operator is LogicOperator.ne and expr.values is None:
-                sql.append("is not null")
+                if expr.operator == LogicOperator.eq:
+                    sql.append("is null")
+                else:
+                    sql.append("is not null")
             else:
                 mysql_predicate_tokens(expr.values[0], sql, params)
                 sql.append(symbols[expr.operator])
                 sql.append(Config.PARAMSTYLE)
                 params.append(expr.values[1])
+
         elif expr.operator in ArithmeticOperator:
             field, value = expr.values
             mysql_predicate_tokens(field, sql, params)
@@ -228,13 +231,11 @@ def insert_sql_params(query: Insert) -> tuple[str, tuple[Any, ...]]:
 
     sql.append("VALUES")
 
-    sql.append(f"({Config.PARAMSTYLE})")
+    sql.append(f"({','.join(Config.PARAMSTYLE for _ in field_names)})")
 
+    print("query.values", query.values)
     for value in query.values:
-        params.append(tuple(value[i] for i in field_names))
-
-    # remove tail comma
-    sql.append(sql.pop()[:-1])
+        params.append(tuple(getattr(value, i) for i in field_names))
 
     return " ".join(sql), tuple(params)
 

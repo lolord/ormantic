@@ -1,3 +1,12 @@
-from .session import AIOCursor, AsyncClient, Session, create_client
+from .aiosession import AIOClient, AIOCursor, AIOSession, create_client
+from .session import Client, ConnectFactory, Session
 
-__all__ = ("AsyncClient", "Session", "AIOCursor", "create_client")
+__all__ = (
+    "AIOClient",
+    "AIOSession",
+    "AIOCursor",
+    "create_client",
+    "Client",
+    "ConnectFactory",
+    "Session",
+)
