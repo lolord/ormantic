@@ -3,7 +3,7 @@ from typing import Any, Callable, Optional, Self, Tuple, TypeVar
 from pydantic.fields import FieldInfo, ModelField, Undefined
 
 from ormantic.errors import FieldAttributeConflictError
-from ormantic.express import ArithmeticMixin, LoginMixin
+from ormantic.express import ArithmeticMixin, LogicMixin
 from ormantic.typing import ABCField, ABCTable, is_nullable
 
 SupportSort = TypeVar("SupportSort", bound=ABCField, covariant=True)
@@ -176,7 +176,7 @@ class DistinctFieldMixin(ABCField):
 
 
 class FakeField(
-    LoginMixin,
+    LogicMixin,
     ArithmeticMixin,
     SortMixin,
     CountFieldMixin,
@@ -194,7 +194,7 @@ class FakeField(
 
 
 class FieldProxy(
-    LoginMixin,
+    LogicMixin,
     ArithmeticMixin,
     SortMixin,
     CountFieldMixin,

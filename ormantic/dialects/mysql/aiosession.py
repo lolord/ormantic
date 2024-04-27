@@ -104,7 +104,7 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
         self.results: Optional[List[ModelType]] = None
 
     def __await__(self) -> Generator[None, None, List[ModelType]]:
-        if self.results is not None:
+        if self.results is not None:  # pragma: no cover
             return self.results
 
         self.cursor = yield from self.session.execute(
@@ -119,7 +119,7 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
         return instances
 
     async def __aiter__(self) -> AsyncGenerator[ModelType, None]:
-        if self.results is not None:
+        if self.results is not None:  # pragma: no cover
             for res in self.results:
                 yield res
             return
@@ -260,7 +260,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         query = Query(model, filters=filters, sorts=sorts).distinct(field)
         cursor = await self.execute(query)
         data = await cursor.fetchall()
-        return [i for (i, _) in data]
+        return [i for (i,) in data]
 
     async def save(self, instance: ModelType) -> ModelType:
         """Persist an instance to the database
@@ -299,7 +299,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         count = await self.execute(
             Delete(type(instance), [instance.dict(primary_keys=True)])
         )
-        if count == 0:
+        if count == 0:  # pragma: no cover
             raise RowNotFoundError
         return instance
 

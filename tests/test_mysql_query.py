@@ -1,4 +1,4 @@
-from ormantic import Delete, Field, Model, Query
+from ormantic import Delete, Field, Insert, Model, Query, Update
 from ormantic.dialects.mysql.query import sql_params
 
 
@@ -106,6 +106,23 @@ def test_count_distinct():
     assert sql_params(query) == (
         "select count(distinct `user`.`id`) from `user` where `user`.`name` = %s",
         ("test",),
+    )
+
+
+def test_insert():
+    query = Insert(User, [User(id=1, name="test1"), User(id=2, name="test2")])
+    assert sql_params(query) == (
+        "insert into `user` ( `user`.`id`, `user`.`name` ) VALUES (%s,%s)",
+        ((1, "test1"), (2, "test2")),
+    )
+
+
+def test_update():
+    query = Update(User).filter(User.id == 1).update(name="test")
+
+    assert sql_params(query) == (
+        "update `user` set `user`.`name` = %s where `user`.`id` = %s",
+        ("test", 1),
     )
 
 

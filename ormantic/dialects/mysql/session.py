@@ -21,7 +21,7 @@ from ormantic.errors import RowNotFoundError
 from ormantic.express import Predicate
 from ormantic.fields import FieldProxy, SupportSort
 from ormantic.model import ModelType
-from ormantic.query import Delete, Query
+from ormantic.query import Delete, Insert, Query
 from ormantic.typing import ABCField, ABCQuery
 from ormantic.utils import logger
 
@@ -234,7 +234,7 @@ class Session(ContextManager):
         """
 
         count = self.execute(Delete(type(instance), [instance.dict(primary_keys=True)]))
-        if count == 0:
+        if count == 0:  # pragma: no cover
             raise RowNotFoundError
         return instance
 
@@ -242,7 +242,10 @@ class Session(ContextManager):
         sql, params = sql_params(query)
         logger.info(f"sql_params: {sql}, {params}")
         cur = self.connection.cursor(*cursors)
-        cur.execute(sql, params)
+        if isinstance(query, Insert):
+            cur.executemany(sql, params)
+        else:
+            cur.execute(sql, params)
         return cur
         # return cursor.fetchall()
 

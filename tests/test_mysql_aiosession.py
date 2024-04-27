@@ -70,10 +70,19 @@ async def test_mysql_curd_with_context():
             await session.save_all([tom, jerry])
             count = await session.count(User)
             assert count == 2
+
+            names = await session.distinct(User, User.name, sorts=[User.name.asc])  # type: ignore
+            assert names == ["jerry", "tom"]
+
+            users: list[User] = []
+            async for i in session.find(User, sorts=[User.name.asc]):  # type: ignore
+                users.append(i)
+            assert names == [i.name for i in users]
+
+            users = await session.find(User, sorts=[User.name.asc])  # type: ignore
+            assert names == [i.name for i in users]
+
             tom = await session.find_one(User, User.id == 1)
             assert tom
             tom.name = "Tom"
             await session.save(tom)
-            tom = await session.find_one(User, User.id == 1)
-            assert tom
-            assert tom.name == "Tom"

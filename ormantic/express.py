@@ -116,7 +116,7 @@ class ArithmeticMixin:
         return Func.mod(self, other)
 
 
-class LoginMixin:
+class LogicMixin:
     def __gt__(self, value: Any) -> "Predicate":
         return self.gt(value)
 
@@ -172,7 +172,7 @@ class LoginMixin:
         return Func.and_(self, value)
 
 
-class Predicate(LoginMixin, ArithmeticMixin):
+class Predicate(LogicMixin, ArithmeticMixin):
     def __init__(self, operator: Operator, values: list | tuple) -> None:
         _values = []
         for i in values:
@@ -231,6 +231,8 @@ def encode(obj: Any) -> Predicate:
                 express.extend(encode(i) for i in value)
             elif op is LogicOperator.OR:  # v is sequence
                 express.append(Func.or_(*[encode(i) for i in value]))
+            elif op in (LogicOperator.IN, LogicOperator.NIN):  # v is sequence
+                express.append(Predicate(op, [value[0], tuple(value[1])]))
             elif op in ArithmeticOperator:
                 f, v = value
                 if isinstance(v, list):
@@ -269,7 +271,7 @@ def encode(obj: Any) -> Predicate:
                     )
 
         elif check_predicate(value):
-            # {field: {$not: {$gt: 1}}}
+            # {field: {$: {$: x}}}
             for k, v in value.items():
                 e = encode({k: [field, v]})
                 express.append(e)

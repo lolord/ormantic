@@ -104,7 +104,8 @@ def test_query_limit():
 
 def test_insert():
     users = [User(id=1, name="test"), User(id=2, name="test")]
-    query = Insert([users[0]]).add(users[1])
+    query = Insert(User, [users[0]])
+    query.add(users[1])
     assert query.values == users
 
 
