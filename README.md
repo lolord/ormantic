@@ -120,6 +120,7 @@ async def test_mysql_curd():
 ## Implemented database dialects
 
 - [X] MySQL
-  - [X] Asyncio Engine
+  - [X] aiomysql
+  - [X] pymysql
 - [ ] PostgreSQL
 - [ ] SQLite
