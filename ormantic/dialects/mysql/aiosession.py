@@ -1,15 +1,15 @@
 from asyncio.events import AbstractEventLoop
 from contextlib import AbstractAsyncContextManager
+from types import TracebackType
 from typing import (
     Any,
     AsyncGenerator,
     AsyncIterable,
     Awaitable,
     Generator,
-    List,
     Literal,
     Optional,
-    Tuple,
+    Self,
     Type,
     Union,
     cast,
@@ -36,16 +36,16 @@ async def create_client(
     user: Optional[str] = None,
     password: str = "",
     db: Optional[str] = None,
-    minsize=1,
-    maxsize=10,
-    echo=False,
-    pool_recycle=-1,
+    minsize: int = 1,
+    maxsize: int = 10,
+    echo: bool = False,
+    pool_recycle: int = -1,
     loop: Optional[AbstractEventLoop] = None,
-    autocommit=False,
+    # autocommit: bool = False,
     connect_timeout: Optional[float] = None,
     charset: str = "",
     **kwargs: Any,
-):
+) -> "AIOClient":
     pool = await aiomysql.create_pool(
         host=host,
         port=port,
@@ -57,7 +57,7 @@ async def create_client(
         echo=echo,
         pool_recycle=pool_recycle,
         loop=loop,
-        autocommit=autocommit,
+        autocommit=False,
         connect_timeout=connect_timeout,
         charset=charset,
         **kwargs,
@@ -69,24 +69,29 @@ class AIOClient(AbstractAsyncContextManager):
     def __init__(self, pool: Pool):
         self.pool = pool
 
-    async def __aexit__(self, exc_type, exc_value, traceback):
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
         await self.close()
 
-    async def close(self):
+    async def close(self) -> None:
         self.pool.close()
         await self.pool.wait_closed()
 
-    async def release(self, conn: Connection):
+    async def release(self, conn: Connection) -> None:
         await self.pool.release(conn)
 
     def session(self) -> "AIOSession":
         return AIOSession(self)
 
-    async def connection(self):
+    async def connection(self) -> Connection:
         return await self.pool.acquire()
 
 
-class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
+class AIOCursor(Awaitable[list[ModelType]], AsyncIterable[ModelType]):
     """This AIOCursor object support multiple async operations:
 
     - **async for**: asynchronously iterate over the query results
@@ -94,22 +99,23 @@ class AIOCursor(Awaitable[List[ModelType]], AsyncIterable[ModelType]):
     """
 
     def __init__(
-        self, session: "AIOSession", model: Type[ModelType], query: Query[ModelType]
+        self,
+        session: "AIOSession",
+        model: Type[ModelType],
+        query: Query[Type[ModelType]],
     ):
         super().__init__()
         self.session = session
         self.model = model
         self.cursor: Optional[DictCursor] = None
-        self.query: Query[ModelType] = query
-        self.results: Optional[List[ModelType]] = None
+        self.query: Query[Type[ModelType]] = query
+        self.results: Optional[list[ModelType]] = None
 
-    def __await__(self) -> Generator[None, None, List[ModelType]]:
+    def __await__(self) -> Generator[None, None, list[ModelType]]:
         if self.results is not None:  # pragma: no cover
             return self.results
 
-        self.cursor = yield from self.session.execute(
-            self.query, DictCursor
-        ).__await__()
+        self.cursor = yield from self.session.execute(self.query, DictCursor).__await__()
         rows = yield from self.cursor.fetchall().__await__()
         instances = []
         for row in rows:
@@ -139,10 +145,9 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
     in an asynchronous way using aiomysql.
     """
 
-    def __init__(self, client: AIOClient, autocommit: bool = False) -> None:
+    def __init__(self, client: AIOClient) -> None:
         self._connection: Connection | None = None
         self.client: AIOClient = client
-        self.autocommit = autocommit
 
     @property
     def connection(self) -> Connection:
@@ -152,35 +157,41 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         yield from self.__aenter__().__await__()
         return self
 
-    async def __aenter__(self):
-        if self._connection is None:
-            self._connection = await self.client.connection()
+    async def __aenter__(self) -> Self:
+        if self._connection:  # pragma: no cover
+            return self
+
+        self._connection = await self.client.connection()
         return self
 
-    async def __aexit__(self, exc_type, exc, tb):
-        if self.autocommit is True:
-            await self.commit()
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
         await self.close()
 
-    async def close(self):
+    async def close(self) -> None:
         try:
+            await self.commit()
             await self.client.release(self.connection)
         finally:
-            self.pool = None  # type: ignore
-            self._connection = None  # type: ignore
+            self.pool = None
+            self._connection = None
 
     def find(
         self,
         model: Type[ModelType],
         *filters: Union[Predicate, bool],
-        sorts: List[Tuple[SupportSort, bool]] = [],
+        sorts: list[tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
     ) -> AIOCursor[ModelType]:
         """Search for Model instances matching the query filter provided
 
         Args:
-            model: orm model
+            model: orm model class
             *filters: query filters
             sorts: sort expression
             offset: number of row to skip
@@ -200,12 +211,12 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         self,
         model: Type[ModelType],
         *filters: Union[Predicate, bool],
-        sorts: List[Tuple[SupportSort, bool]] = [],
+        sorts: list[tuple[SupportSort, bool]] = [],
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
 
         Args:
-            model: orm model
+            model: orm model class
             *filters: query filters
             sorts: sort expression
 
@@ -229,7 +240,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         """Get the count of rows matching a query
 
         Args:
-            model: orm model
+            model: orm model class
             *filters: query filters
             field: selected field
 
@@ -246,16 +257,17 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         model: Type[ModelType],
         field: FieldProxy,
         *filters: Predicate,
-        sorts: List[Tuple[SupportSort, bool]] = [],
-    ) -> List[Any]:
-        """_summary_
+        sorts: list[tuple[SupportSort, bool]] = [],
+    ) -> list[Any]:
+        """Get the field of rows matching a query
 
         Args:
-            model (Type[ModelType]): _description_
-            field (FieldProxy): _description_
+            model (Type[ModelType]): orm model class
+            field (FieldProxy): selected field
+            *filters: query filters
 
         Returns:
-            List[Any]: _description_
+            list[Any]: field list
         """
         query = Query(model, filters=filters, sorts=sorts).distinct(field)
         cursor = await self.execute(query)
@@ -268,23 +280,28 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         Args:
             instance (ModelType): instance to persist
         """
-        if not instance.__fields_set__:
-            return instance
-        cursor = await self.execute(instance)
-        id = cursor.lastrowid
-        if id is not None:
+        if instance.__fields_set__:
+            cursor = await self.execute(instance)
+            id = cast(int, cursor.lastrowid)
+
             logger.info(f"lastrowid: {id}")
             instance.set_auto_increment(id)
+            instance.__fields_set__.clear()
         return instance
 
-    async def save_all(self, instances: List[ModelType]):
+    async def save_all(self, instances: list[ModelType]) -> list[ModelType]:
+        """Persist an instances to the database
+
+        Args:
+            instances (list[ModelType]): instances to persist
+        """
         for i in instances:
             await self.save(i)
         return instances
 
     async def delete(self, query: Delete) -> int:
         cursor = await self.execute(query)
-        return cursor.rowcount
+        return cast(int, cursor.rowcount)
 
     async def remove(self, instance: ModelType) -> ModelType:
         """Remove an instance from the database
@@ -296,16 +313,14 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
             RowNotFoundError: the instance has not been persisted to the database
         """
 
-        count = await self.execute(
-            Delete(type(instance), [instance.dict(primary_keys=True)])
-        )
-        if count == 0:  # pragma: no cover
+        cursor = await self.execute(Delete(type(instance), [instance.dict(primary_keys=True)]))
+        if cursor.rowcount == 0:
             raise RowNotFoundError
         return instance
 
     async def execute(
         self,
-        query: ABCQuery | ModelType | str,  # type: ignore
+        query: ABCQuery | ModelType | str,
         *cursors: Type[Cursor],
     ) -> Any:
         sql, params = sql_params(query)
@@ -313,7 +328,6 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         async with self.connection.cursor(*cursors) as cur:
             await cur.execute(sql, params)
             return cur
-        # return await cursor.fetchall()
 
     async def commit(self) -> None:
         try:

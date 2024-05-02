@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Self, Tuple, TypeVar
+from typing import Any, Callable, Optional, Self, TypeVar
 
 from pydantic.fields import FieldInfo, ModelField, Undefined
 
@@ -6,7 +6,7 @@ from ormantic.errors import FieldAttributeConflictError
 from ormantic.express import ArithmeticMixin, LogicMixin
 from ormantic.typing import ABCField, ABCTable, is_nullable
 
-SupportSort = TypeVar("SupportSort", bound=ABCField, covariant=True)
+SupportSort = TypeVar("SupportSort", bound=ABCField)
 
 
 def Field(
@@ -94,9 +94,7 @@ def Field(
 
     # autoincrement && (default_factory || default) It's not allowed
     if autoincrement and (default_factory is not None or default is not Undefined):
-        raise FieldAttributeConflictError(
-            "cannot specify both autoincrement and default or default_factory"
-        )
+        raise FieldAttributeConflictError("cannot specify both autoincrement and default or default_factory")
 
     field = FieldInfo(
         default=None if default == Ellipsis else default,
@@ -126,23 +124,23 @@ def Field(
     return field
 
 
-def asc(field: SupportSort) -> Tuple[SupportSort, bool]:
+def asc(field: SupportSort) -> tuple[SupportSort, bool]:
     """Sort by ascending `field`."""
     return (field, True)
 
 
-def desc(field: SupportSort) -> Tuple[SupportSort, bool]:
+def desc(field: SupportSort) -> tuple[SupportSort, bool]:
     """Sort by descending `field`."""
     return (field, False)
 
 
 class SortMixin(ABCField):
     @property
-    def asc(self) -> Tuple[Self, bool]:
+    def asc(self) -> tuple[Self, bool]:
         return asc(self)
 
     @property
-    def desc(self) -> Tuple[Self, bool]:
+    def desc(self) -> tuple[Self, bool]:
         return desc(self)
 
 
@@ -150,11 +148,11 @@ class CountField(ABCField):
     def __init__(self, field: ABCField) -> None:
         self.field = field
 
-    def __pos__(self) -> str:
-        return f"count({+self.field})"
+    def orm_name(self) -> str:
+        return f"count({self.field.orm_name()})"
 
     def __str__(self) -> str:
-        return f"count({+self.field})"
+        return f"count({self.field})"
 
 
 class CountFieldMixin(ABCField):
@@ -166,12 +164,12 @@ class DistinctField(CountFieldMixin, ABCField):
     def __init__(self, field: ABCField) -> None:
         self.field = field
 
-    def __pos__(self) -> str:
+    def orm_name(self) -> str:
         return f"distinct {self.field}"
 
 
 class DistinctFieldMixin(ABCField):
-    def distinct(self) -> ABCField:
+    def distinct(self) -> DistinctField:
         return DistinctField(self)
 
 
@@ -189,7 +187,7 @@ class FakeField(
         self.name = name
         self.table = table
 
-    def __pos__(self) -> str:
+    def orm_name(self) -> str:
         return self.name
 
 
@@ -205,12 +203,12 @@ class FieldProxy(
         self.pydantic_field = pydantic_field
         self.table = table
 
-    def __pos__(self) -> str:
+    def orm_name(self) -> str:
         return self.pydantic_field.alias or self.pydantic_field.name
 
     @property
-    def required(self):
-        return self.pydantic_field.required
+    def required(self) -> bool:
+        return self.pydantic_field.required is True
 
     @property
     def nullable(self) -> bool:
@@ -250,14 +248,14 @@ class FieldProxy(
         return self.pydantic_field.field_info.extra.get("update_factory", None)
 
     @property
-    def default_factory(self):
+    def default_factory(self) -> Optional[Callable[[], Any]]:
         return self.pydantic_field.default_factory
 
     def __str__(self) -> str:
-        return f"{+self.table}.{+self}"
+        return self.orm_name()
 
     def __repr__(self) -> str:
-        return f"FieldProxy(name='{+self}', table='{+self.table}')"
+        return f"FieldProxy(name='{self}', table='{self.table}')"
 
     def __hash__(self) -> int:
         return hash(str(self))

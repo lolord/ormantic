@@ -4,12 +4,11 @@ from ormantic.operators import ArithmeticOperator, LogicOperator, Operator
 
 
 def test_operator():
-    assert len(list(Operator)) >= len(list(LogicOperator)) + len(
-        list(ArithmeticOperator)
-    )
+    assert len(list(Operator)) >= len(list(LogicOperator)) + len(list(ArithmeticOperator))
     assert LogicOperator.eq in LogicOperator
     assert LogicOperator.eq in Operator
-    assert Operator("$eq") == Operator("$eq")
+    assert LogicOperator.eq == Operator("$eq")
+    assert "$eq" in Operator  # type: ignore
     assert "$eq" == Operator("$eq")
 
     assert LogicOperator["$eq"] == LogicOperator.eq

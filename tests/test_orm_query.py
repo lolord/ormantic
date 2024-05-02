@@ -55,7 +55,7 @@ def test_select():
 
 def test_count_distinct():
     query = Query(User).count()
-    assert +query.fields[0] == "count(*)"
+    assert query.fields[0].orm_name() == "count(*)"
 
     query = Query(User).count("id")
     assert query.fields == [User_ID]

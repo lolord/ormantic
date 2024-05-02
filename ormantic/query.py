@@ -7,9 +7,9 @@ from typing import (
     List,
     Literal,
     Optional,
+    Self,
     Sequence,
     Tuple,
-    Type,
     TypeAlias,
     TypeVar,
     Union,
@@ -18,39 +18,38 @@ from typing import (
 from ormantic.errors import FieldNotFoundError
 from ormantic.express import Predicate
 from ormantic.fields import CountField, DistinctField, FakeField, SupportSort, asc, desc
-from ormantic.model import ModelType
-from ormantic.typing import ABCField, ABCQuery, ABCTable
+from ormantic.typing import ABCField, ABCQuery, ModelType
 
 QueryResultItemType = TypeVar("QueryResultItemType")
 
 SupportExpress: TypeAlias = List[SupportSort]
 
 
-class SelectMixin:
+class SelectMixin(ABCQuery[ModelType], Generic[ModelType]):
     if TYPE_CHECKING:
-        table: ABCTable
+        # table: ModelType
         fields: List[ABCField]
 
-    def select(self, *fields: Union[ABCField, str]):
+    def select(self, *fields: Union[ABCField, str]) -> Self:
         self.fields = []
         for field in fields:
             if isinstance(field, ABCField):
                 self.fields.append(field)
             else:
-                field = self.table.get_field(field)
-                if field is None:
-                    raise FieldNotFoundError(field)
-                self.fields.append(field)
+                field_ = self.table.get_field(field)
+                if field_ is None:
+                    raise FieldNotFoundError(field_)
+                self.fields.append(field_)
 
         return self
 
 
-class FilterMixin:
+class FilterMixin(ABCQuery[ModelType], Generic[ModelType]):
     if TYPE_CHECKING:
-        table: ABCTable
+        # table: ABCTable
         filters: List[Predicate]
 
-    def filter(self, *args: Union[Predicate, Dict, bool], **kwargs: Any):
+    def filter(self, *args: Union[Predicate, Dict, bool], **kwargs: Any) -> Self:
         if getattr(self, "filters", None) is None:  # pragma: no cover
             self.filters = []
         for item in args:
@@ -72,12 +71,12 @@ class FilterMixin:
     where = filter
 
 
-class OrderByMixin:
+class OrderByMixin(ABCQuery[ModelType], Generic[ModelType]):
     if TYPE_CHECKING:
         sorts: SupportExpress
-        table: ABCTable
+        # table: ABCTable
 
-    def order_by(self, *args: Tuple[SupportSort, bool], **kwargs: bool):
+    def order_by(self, *args: Tuple[SupportSort, bool], **kwargs: bool) -> Self:
         self.sorts += args
         for name, v in kwargs.items():
             field = self.table.get_field(name)
@@ -94,27 +93,27 @@ class LimitMixin:
         offset: int | None
         rows: int | None
 
-    def limit(self, offset: int | None = None, rows: int | None = None):
+    def limit(self, offset: int | None = None, rows: int | None = None) -> Self:
         self.offset = offset
         self.rows = rows
         return self
 
-    def first(self):
+    def first(self) -> Self:
         return self.limit(None, 1)
 
-    def all(self):
+    def all(self) -> Self:
         return self.limit(None, None)
 
 
 class PaginateMixin(LimitMixin):
-    def paginate(self, page: int = 1, page_size: int = 1000):
+    def paginate(self, page: int = 1, page_size: int = 1000) -> Self:
         return self.limit((page - 1) * page_size, page_size)
 
 
-class CountDistinct(SelectMixin):
-    table: ABCTable
+class CountDistinct(SelectMixin[ModelType], Generic[ModelType]):
+    # table: ABCTable
 
-    def count(self, field: Union[ABCField, str, Literal[1, "*"]] = "*"):
+    def count(self, field: Union[ABCField, str, Literal[1, "*"]] = "*") -> Self:
         """如果列为主键,count(列名)效率优于count(1)
         如果列不为主键,count(1)效率优于count(列名)
         如果表中存在主键,count(主键列名)效率最优
@@ -130,7 +129,7 @@ class CountDistinct(SelectMixin):
             else:
                 return self.select(FakeField(str(field), table=self.table).count())
 
-    def distinct(self, field: Union[ABCField, str]):
+    def distinct(self, field: Union[ABCField, str]) -> Self:
         if isinstance(field, ABCField):
             _field = DistinctField(field)
         else:
@@ -138,7 +137,7 @@ class CountDistinct(SelectMixin):
         self.fields = [_field]
         return self
 
-    def count_distinct(self, field: Union[ABCField, str]):
+    def count_distinct(self, field: Union[ABCField, str]) -> Self:
         self.distinct(field)
         _field = self.fields.pop()
         self.count(_field)
@@ -146,16 +145,15 @@ class CountDistinct(SelectMixin):
 
 
 class Query(
-    ABCQuery,
-    FilterMixin,
-    CountDistinct,
+    FilterMixin[ModelType],
+    CountDistinct[ModelType],
     PaginateMixin,
-    OrderByMixin,
+    OrderByMixin[ModelType],
     Generic[ModelType],
 ):
     def __init__(
         self,
-        table: Type[ModelType],
+        table: ModelType,
         fields: Sequence[Union[str, ABCField]] = [],
         filters: Sequence[Union[Predicate, Dict, bool]] = [],
         offset: int | None = None,
@@ -176,14 +174,14 @@ class Query(
         self.order_by(*sorts)
         self.limit(offset, rows)
 
-    def __pos__(self):
-        return +self.table
+    def orm_name(self) -> str:
+        return self.table.orm_name()
 
 
-class Update(ABCQuery, FilterMixin):
+class Update(FilterMixin[ModelType]):
     def __init__(
         self,
-        table: ABCTable,
+        table: ModelType,
         filters: Sequence[Union[Predicate, Dict]] = [],
         value: Optional[Dict[str, Any]] = None,
     ):
@@ -192,37 +190,37 @@ class Update(ABCQuery, FilterMixin):
         self.value = {} if value is None else value
         self.filter(*filters)
 
-    def update(self, **value: Any):
+    def update(self, **value: Any) -> Self:
         self.value.update(value)
         return self
 
-    def __pos__(self):
-        return +self.table
+    def orm_name(self) -> str:
+        return self.table.orm_name()
 
 
-class Delete(ABCQuery, FilterMixin):
+class Delete(FilterMixin[ModelType]):
     def __init__(
         self,
-        table: ABCTable,
+        table: ModelType,
         filters: Sequence[Union[Predicate, Dict]] = [],
     ):
         self.table = table
         self.filter(*filters)
 
-    def __pos__(self):
-        return +self.table
+    def orm_name(self) -> str:
+        return self.table.orm_name()
 
 
-class Insert(ABCQuery[Type[ModelType]]):
+class Insert(ABCQuery[ModelType]):
     values: List[ModelType]
 
-    def __init__(self, table: Type[ModelType], values: List[ModelType]):
+    def __init__(self, table: ModelType, values: List[ModelType]):
         self.table = table
         self.values = [] if values is None else values
 
-    def add(self, value: ModelType):
+    def add(self, value: ModelType) -> Self:
         self.values.append(value)
         return self
 
-    def __pos__(self):
+    def orm_name(self) -> str:
         return ""

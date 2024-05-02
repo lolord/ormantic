@@ -4,7 +4,6 @@ from typing import (
     AbstractSet,
     Any,
     Callable,
-    Dict,
     Generic,
     Mapping,
     Optional,
@@ -19,17 +18,16 @@ from typing import (
 NoArgAnyCallable = Callable[[], Any]
 AbstractSetIntStr = AbstractSet[Union[int, str]]
 MappingIntStrAny = Mapping[Union[int, str], Any]
-DictStrAny = Dict[str, Any]
+DictStrAny = dict[str, Any]
 
 
 def is_nullable(_type: Any) -> bool:
     return get_origin(_type) is Union and NoneType in get_args(_type)
 
 
-class Named:
-    @classmethod
+class Named(Protocol):
     @abstractmethod
-    def __pos__(cls) -> str:
+    def orm_name(self) -> str:
         raise NotImplementedError
 
 
@@ -40,9 +38,9 @@ class ABCField(Named):
 FieldType = TypeVar("FieldType", bound=ABCField)
 
 
-# Dict[str, ABCField] is not compatible with Dict[str, FieldType]
+# dict[str, ABCField] is not compatible with dict[str, FieldType]
 # so use FieldDict instead
-class FieldDict(dict[str, FieldType]):
+class FieldDict(dict[str, FieldType], Generic[FieldType]):
     ...
 
 
@@ -54,7 +52,8 @@ class ABCTable(Protocol):
     def get_field(self, field_name: str) -> Optional[ABCField]:
         return self.get_fields().get(field_name)
 
-    def __pos__(self) -> str:
+    @abstractmethod
+    def orm_name(self) -> str:
         raise NotImplementedError
 
 
@@ -65,11 +64,8 @@ class ABCQuery(ABCTable, Generic[ModelType]):
     table: ModelType
 
     @abstractmethod
-    def __pos__(self):
+    def orm_name(self) -> str:
         raise NotImplementedError
 
-    def get_fields(self) -> Dict[str, ABCField]:
+    def get_fields(self) -> FieldDict:
         return self.table.get_fields()
-
-
-ModelType = TypeVar("ModelType", bound=ABCTable)

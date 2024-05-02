@@ -4,7 +4,7 @@ from typing import (
     ClassVar,
     Dict,
     Optional,
-    Tuple,
+    Self,
     Type,
     TypeVar,
     Union,
@@ -21,25 +21,29 @@ from ormantic.errors import (
     PrimaryKeyModifyError,
 )
 from ormantic.fields import Field, FieldProxy
-from ormantic.typing import FieldDict
+from ormantic.typing import (
+    ABCTable,
+    AbstractSetIntStr,
+    DictStrAny,
+    FieldDict,
+    MappingIntStrAny,
+)
 from ormantic.utils import is_dunder
-
-if TYPE_CHECKING:
-    from .typing import AbstractSetIntStr, DictStrAny, MappingIntStrAny
-
 
 _is_base_model_class_defined = False
 
 
 @dataclass_transform(kw_only_default=True, field_specifiers=(Field,))
-class ModelMetaclass(pydantic.main.ModelMetaclass):
+class ModelMetaclass(pydantic.main.ModelMetaclass, ABCTable):
     @staticmethod
-    def _prepare_fields(namespace: Dict[str, Any]):
-        hot_fields = set()
-        annotations = {}
-        relations = {}
+    def _prepare_fields(
+        namespace: DictStrAny,
+    ) -> tuple[set[str], DictStrAny, DictStrAny]:
+        hot_fields: set[str] = set()
+        annotations: dict[str, Any] = {}
+        relations: dict[str, Any] = {}
 
-        base_annotations: Dict[str, Any] = namespace.get("__annotations__", {})
+        base_annotations: dict[str, Any] = namespace.get("__annotations__", {})
 
         for field_name, field_type in base_annotations.items():
             if is_dunder(field_name):
@@ -60,17 +64,17 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
             if field_name not in annotations:
                 annotations[field_name] = field_type
 
-        for r in relations:  # pragma: no cover
-            annotations.pop(r)
-            namespace.pop(r)
+        # for r in relations:
+        #     annotations.pop(r)
+        #     namespace.pop(r)
         return hot_fields, annotations, relations
 
     @no_type_check
     def __new__(  # noqa C901
         mcs,
         name: str,
-        bases: Tuple[type, ...],
-        namespace: Dict[str, Any],
+        bases: tuple[type, ...],
+        namespace: dict[str, Any],
         **kwargs: Any,
     ):
         table: str = namespace.get("__table__", name.lower())
@@ -115,17 +119,17 @@ class ModelMetaclass(pydantic.main.ModelMetaclass):
 
         return cls
 
-    def __pos__(cls) -> str:
-        return getattr(cls, "__table__")
+    def orm_name(cls) -> str:
+        return cast(str, getattr(cls, "__table__"))
 
 
 class BaseORMModel(pydantic.BaseModel):
     if TYPE_CHECKING:
         __table__: ClassVar[str]
         __orm_fields__: ClassVar[FieldDict[FieldProxy]]
-        __petty_keys__: ClassVar[Dict[str, FieldProxy]]
-        __primary_keys__: ClassVar[Dict[str, FieldProxy]]
-        __hot_fields__: ClassVar[Tuple[str, ...]]
+        __petty_keys__: ClassVar[dict[str, FieldProxy]]
+        __primary_keys__: ClassVar[dict[str, FieldProxy]]
+        __hot_fields__: ClassVar[tuple[str, ...]]
         __inc_field__: ClassVar[Optional[str]]
 
     @classmethod
@@ -137,14 +141,14 @@ class BaseORMModel(pydantic.BaseModel):
         return cast(Optional[FieldProxy], cls.get_fields().get(field_name))
 
     @classmethod
-    def __pos__(cls) -> str:
+    def orm_name(cls) -> str:
         return cls.__table__
 
     def __setattr__(self, name: str, value: Any) -> None:
         if name in self.__fields__:
             if name in self.__primary_keys__ and getattr(self, name, None) is not None:
                 raise PrimaryKeyModifyError
-            proxy = cast(FieldProxy, self.__orm_fields__[name])
+            proxy = self.__orm_fields__[name]
 
             if not proxy.nullable and value is None:
                 raise ValueError(f"{self}.{name} is not null")
@@ -209,9 +213,7 @@ class BaseORMModel(pydantic.BaseModel):
         primary_keys: Optional[bool] = None,
         petty_keys: Optional[bool] = None,
     ) -> "DictStrAny":
-        _, _, validation_error = pydantic.main.validate_model(
-            self.__class__, self.__dict__
-        )
+        _, _, validation_error = pydantic.main.validate_model(self.__class__, self.__dict__)
 
         if validation_error:  # pragma: no cover
             raise validation_error
@@ -249,7 +251,7 @@ class BaseORMModel(pydantic.BaseModel):
         return False
 
     @classmethod
-    def validate_row(cls, row: Dict):
+    def validate_row(cls, row: Dict) -> Self:
         val = cls.validate(row)
         val.__fields_set__.clear()
         return val
