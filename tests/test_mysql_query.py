@@ -6,30 +6,34 @@ class User(Model):
     __table__ = "user"
     id: int = Field(primary=True, autoincrement=True)
     name: str
+    age: int
 
 
 def test_fields():
     query = Query(User)
-    assert list(query.fields) == ["id", "name"]
-    assert sql_params(query) == ("select `user`.`id`, `user`.`name` from `user`", ())
+    assert list(query.fields) == ["id", "name", "age"]
+    assert sql_params(query) == (
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user`",
+        (),
+    )
 
 
 def test_order_by():
     query = Query(User).order_by(User.id.asc)  # type: ignore
     assert sql_params(query) == (
-        "select `user`.`id`, `user`.`name` from `user` order by `user`.`id` asc",
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user` order by `user`.`id` asc",
         (),
     )
 
     query = Query(User).order_by(id=True)  # type: ignore
     assert sql_params(query) == (
-        "select `user`.`id`, `user`.`name` from `user` order by `user`.`id` asc",
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user` order by `user`.`id` asc",
         (),
     )
 
     query = Query(User).order_by(User.id.asc, User.name.desc)  # type: ignore
     assert sql_params(query) == (
-        "select `user`.`id`, `user`.`name` from `user` order by `user`.`id` asc, `user`.`name` desc",
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user` order by `user`.`id` asc, `user`.`name` desc",
         (),
     )
 
@@ -37,18 +41,21 @@ def test_order_by():
 def test_limit():
     query = Query(User).limit(offset=5, rows=10)  # type: ignore
     assert sql_params(query) == (
-        "select `user`.`id`, `user`.`name` from `user` limit 5, 10",
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user` limit 5, 10",
         (),
     )
 
     query = Query(User).first()  # type: ignore
     assert sql_params(query) == (
-        "select `user`.`id`, `user`.`name` from `user` limit 1",
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user` limit 1",
         (),
     )
 
     query = Query(User).all()  # type: ignore
-    assert sql_params(query) == ("select `user`.`id`, `user`.`name` from `user`", ())
+    assert sql_params(query) == (
+        "select `user`.`id`, `user`.`name`, `user`.`age` from `user`",
+        (),
+    )
 
 
 def test_query():
@@ -59,8 +66,34 @@ def test_query():
         .limit(offset=5, rows=10)
     )
     assert sql_params(query) == (
-        "select `user`.`id`, `user`.`name` from `user` where `user`.`id` = %s and `user`.`name` = %s order by `user`.`id` asc, `user`.`name` desc limit 5, 10",
+        "select `user`.`id`, `user`.`name`, `user`.`age` "
+        + "from `user` "
+        + "where `user`.`id` = %s and `user`.`name` = %s "
+        + "order by `user`.`id` asc, `user`.`name` desc "
+        + "limit 5, 10",
         (1, "Tom"),
+    )
+
+    query = (
+        Query(User)
+        .filter((User.id > 1) & (User.id < 10))
+        .filter((User.name == "tom") | (User.name == "Tom"))
+        .filter((User.age > 20) & (User.age == 30))
+        .order_by(User.id.asc, User.name.desc)  # type: ignore
+        .limit(offset=5, rows=10)
+    )
+
+    assert sql_params(query) == (
+        (
+            "select `user`.`id`, `user`.`name`, `user`.`age` "
+            + "from `user` "
+            + "where `user`.`id` > %s and `user`.`id` < %s "
+            + "and ( `user`.`name` = %s or `user`.`name` = %s ) "
+            + "and `user`.`age` > %s and `user`.`age` = %s "
+            + "order by `user`.`id` asc, `user`.`name` desc "
+            + "limit 5, 10"
+        ),
+        (1, 10, "tom", "Tom", 20, 30),
     )
 
 
@@ -110,15 +143,22 @@ def test_count_distinct():
 
 
 def test_insert():
-    query = Insert(User, [User(id=1, name="test1"), User(id=2, name="test2")])
+    query = Insert(User, [User(id=1, name="test1", age=20), User(id=2, name="test2", age=30)])
+
     assert sql_params(query) == (
-        "insert into `user` ( `user`.`id`, `user`.`name` ) VALUES (%s,%s)",
-        ((1, "test1"), (2, "test2")),
+        "insert into `user` (`user`.`id`, `user`.`name`, `user`.`age`) values (%s, %s, %s)",
+        ((1, "test1", 20), (2, "test2", 30)),
     )
 
 
 def test_update():
-    query = Update(User).filter(User.id == 1).update(name="test")
+    query = Update(User).update(name="test")
+    assert sql_params(query) == (
+        "update `user` set `user`.`name` = %s",
+        ("test",),
+    )
+
+    query.filter(User.id == 1)
 
     assert sql_params(query) == (
         "update `user` set `user`.`name` = %s where `user`.`id` = %s",
@@ -132,3 +172,7 @@ def test_delete():
 
     query.filter(User.id == 1)
     assert sql_params(query) == ("delete from `user` where `user`.`id` = %s", (1,))
+
+
+def test_sql():
+    assert sql_params("select 1") == ("select 1", ())

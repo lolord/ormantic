@@ -2,6 +2,7 @@ import pytest
 
 from ormantic import Delete, Field, Model
 from ormantic.dialects.mysql import create_client
+from ormantic.errors import RowNotFoundError
 
 table = """CREATE TABLE `users` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -86,3 +87,11 @@ async def test_mysql_curd_with_context():
             assert tom
             tom.name = "Tom"
             await session.save(tom)
+            # Nothing to do
+            await session.save(tom)
+
+            await session.remove(tom)
+            with pytest.raises(RowNotFoundError):
+                await session.remove(tom)
+            tom = await session.find_one(User, User.id == 1)
+            assert tom is None

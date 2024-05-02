@@ -180,9 +180,7 @@ def test_encode():
 
     expr = encode({"$eq": [{"user.id": {"$mod": X}}, X]})
     assert expr.dict() == {"$eq": [{"$mod": ["user.id", X]}, X]}
-    assert encode({"$eq": [{"$mod": ["user.id", X]}, X]}).dict() == {
-        "$eq": [{"$mod": ["user.id", X]}, X]
-    }
+    assert encode({"$eq": [{"$mod": ["user.id", X]}, X]}).dict() == {"$eq": [{"$mod": ["user.id", X]}, X]}
 
     expr = encode({"user.id": {"$eq": {"$add": ["user.id", 1]}}})
     assert expr.dict() == {"$eq": ["user.id", {"$add": ["user.id", 1]}]}
@@ -316,9 +314,7 @@ def test_func_method():
     assert Func.and_(Func.gt(USER_ID, X), Func.lt(USER_ID, Y)).dict() == {
         "$and": [{"$gt": [USER_ID, X]}, {"$lt": [USER_ID, Y]}]
     }
-    assert Func.or_(
-        Func.eq(USER_ID, X), Func.eq(USER_ID, Y), Func.eq(USER_ID, Z)
-    ).dict() == {
+    assert Func.or_(Func.eq(USER_ID, X), Func.eq(USER_ID, Y), Func.eq(USER_ID, Z)).dict() == {
         "$or": [
             {"$eq": [USER_ID, X]},
             {"$eq": [USER_ID, Y]},

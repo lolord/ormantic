@@ -27,8 +27,8 @@ def test_field():
     assert USER_CAT.required is False
     assert USER_UAT.required is False
 
-    assert +USER_ID == "id"
-    assert +USER_NAME == "Name"
+    assert USER_ID.orm_name() == "id"
+    assert USER_NAME.orm_name() == "Name"
 
     assert USER_ID.autoincrement is True
 
