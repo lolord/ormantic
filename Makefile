@@ -53,6 +53,11 @@ testcov: test
 	@pdm run coverage lcov
 
 
+.PHONY: mypy  ## Run all tests, skipping the type-checker integration tests
+mypy: .pdm
+	pdm run mypy ormantic
+
+
 .PHONY: testorm
 testorm: .pdm
 	pdm run coverage run -m pytest -k orm

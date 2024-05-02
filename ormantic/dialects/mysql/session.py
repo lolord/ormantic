@@ -1,15 +1,5 @@
-from typing import (
-    Any,
-    ContextManager,
-    List,
-    Literal,
-    Optional,
-    Tuple,
-    Type,
-    TypeAlias,
-    Union,
-    cast,
-)
+from types import TracebackType
+from typing import Any, ContextManager, Literal, Optional, Type, TypeAlias, Union, cast
 
 import pymysql
 from dbutils.pooled_db import PooledDB, PooledDedicatedDBConnection
@@ -33,13 +23,14 @@ class ConnectFactory:
 
     def __init__(
         self,
-        user=None,  # The first four arguments is based on DB-API 2.0 recommendation.
-        password="",
-        host=None,
-        database=None,
-        port=3306,
-        **kwargs,
-    ) -> None:
+        *,
+        user: str = "",
+        password: str = "",
+        host: str = "127.0.0.1",
+        database: Optional[str] = None,
+        port: int = 3306,
+        **kwargs: Any,
+    ):
         self.user = user
         self.password = password
         self.host = host
@@ -60,22 +51,21 @@ class ConnectFactory:
         )
 
 
-class Client(ContextManager):
+class Client(ContextManager["Client"]):
     def __init__(
         self,
         db: ConnectFactory,
-        mincached=0,
-        maxcached=0,
-        maxshared=0,
-        maxconnections=0,
-        blocking=False,
-        maxusage=None,
-        setsession=None,
-        reset=True,
-        failures=None,
-        ping=1,
-        *args,
-        **kwargs,
+        mincached: int = 0,
+        maxcached: int = 0,
+        maxshared: int = 0,
+        maxconnections: int = 0,
+        blocking: bool = False,
+        maxusage: int = 0,
+        setsession: Any = None,
+        reset: bool = True,
+        failures: Any = None,
+        ping: int = 1,
+        **kwargs: Any,
     ):
         self.pool = PooledDB(
             db,
@@ -89,14 +79,18 @@ class Client(ContextManager):
             reset=reset,
             failures=failures,
             ping=ping,
-            *args,
             **kwargs,
         )
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
         self.close()
 
-    def close(self):
+    def close(self) -> None:
         self.pool.close()
 
     def session(self) -> "Session":
@@ -104,7 +98,7 @@ class Client(ContextManager):
         return Session(conn)
 
 
-class Session(ContextManager):
+class Session(ContextManager["Session"]):
     """The Session object is responsible for handling database operations with MySQL
     in an asynchronous way using aiomysql.
     """
@@ -112,20 +106,25 @@ class Session(ContextManager):
     def __init__(self, connection: Connection) -> None:
         self.connection: Connection = connection
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
         self.close()
 
-    def close(self):
+    def close(self) -> None:
         self.connection.close()
 
     def find(
         self,
         model: Type[ModelType],
         *filters: Predicate | bool,
-        sorts: List[Tuple[SupportSort, bool]] = [],
+        sorts: list[tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
-    ) -> List[ModelType]:
+    ) -> list[ModelType]:
         query = Query(model, filters=filters, offset=offset, rows=rows, sorts=sorts)
         results = []
         cursor = self.execute(query, DictCursor)
@@ -137,12 +136,12 @@ class Session(ContextManager):
         self,
         model: Type[ModelType],
         *filters: Predicate | bool,
-        sorts: List[Tuple[SupportSort, bool]] = [],
+        sorts: list[tuple[SupportSort, bool]] = [],
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
 
         Args:
-            model: orm model
+            model: orm model class
             *filters: query filters
             sorts: sort expression
 
@@ -166,9 +165,9 @@ class Session(ContextManager):
         """Get the count of rows matching a query
 
         Args:
-            model: orm model
-            *filters: query filters
+            model: orm model class
             field: selected field
+            *filters: query filters
 
         Returns:
             int: number of row matching the query
@@ -183,16 +182,17 @@ class Session(ContextManager):
         model: Type[ModelType],
         field: FieldProxy,
         *filters: Predicate,
-        sorts: List[Tuple[SupportSort, bool]] = [],
-    ) -> List[Any]:
-        """_summary_
+        sorts: list[tuple[SupportSort, bool]] = [],
+    ) -> list[Any]:
+        """Get the field of rows matching a query
 
         Args:
-            model (Type[ModelType]): _description_
-            field (FieldProxy): _description_
+            model (Type[ModelType]): orm model class
+            field (FieldProxy): selected field
+            *filters: query filters
 
         Returns:
-            List[Any]: _description_
+            list[Any]: field list
         """
         query = Query(model, filters=filters, sorts=sorts).distinct(field)
         cursor = self.execute(query)
@@ -205,23 +205,22 @@ class Session(ContextManager):
         Args:
             instance (ModelType): instance to persist
         """
-        if not instance.__fields_set__:
-            return instance
-        cursor = self.execute(instance)
-        id = cursor.lastrowid
-        if id is not None:
+        if instance.__fields_set__:
+            cursor = self.execute(instance)
+            id = cast(int, cursor.lastrowid)
             logger.info(f"lastrowid: {id}")
             instance.set_auto_increment(id)
+            instance.__fields_set__.clear()
         return instance
 
-    def save_all(self, instances: List[ModelType]):
+    def save_all(self, instances: list[ModelType]) -> list[ModelType]:
         for i in instances:
             self.save(i)
         return instances
 
     def delete(self, query: Delete) -> int:
         cursor = self.execute(query)
-        return cursor.rowcount
+        return cast(int, cursor.rowcount)
 
     def remove(self, instance: ModelType) -> ModelType:
         """Remove an instance from the database
@@ -233,12 +232,13 @@ class Session(ContextManager):
             RowNotFoundError: the instance has not been persisted to the database
         """
 
-        count = self.execute(Delete(type(instance), [instance.dict(primary_keys=True)]))
-        if count == 0:  # pragma: no cover
+        cursor = self.execute(Delete(type(instance), [instance.dict(primary_keys=True)]))
+
+        if cursor.rowcount == 0:
             raise RowNotFoundError
         return instance
 
-    def execute(self, query: ABCQuery | ModelType | str, *cursors: Type[Cursor]) -> Any:  # type: ignore
+    def execute(self, query: ABCQuery | ModelType | str, *cursors: Type[Cursor]) -> Any:
         sql, params = sql_params(query)
         logger.info(f"sql_params: {sql}, {params}")
         cur = self.connection.cursor(*cursors)
@@ -247,7 +247,6 @@ class Session(ContextManager):
         else:
             cur.execute(sql, params)
         return cur
-        # return cursor.fetchall()
 
     def commit(self) -> None:
         try:

@@ -1,19 +1,19 @@
-from typing import ClassVar, Dict
+from typing import ClassVar, Iterator, Optional, no_type_check
 
 OPERATOR_PREFIX = "$"
 
 
 class OperatorMeta(type):
-    __operators__: ClassVar[Dict[str, "Operator"]] = {}
+    __operators__: ClassVar[dict[str, "Operator"]] = {}
 
-    def __contains__(self, obj: "Operator"):
+    def __contains__(self, obj: "Operator") -> bool:
         return obj in self.__operators__
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator["Operator"]:
         return (self.__operators__[name] for name in self.__operators__)
 
-    def __call__(self, operator: str):
-        ops = getattr(self, "__operators__")
+    def __call__(self, operator: str) -> "Operator":
+        ops: dict[str, "Operator"] = getattr(self, "__operators__")
         if operator in ops:
             return ops[operator]
         else:
@@ -22,12 +22,12 @@ class OperatorMeta(type):
 
 
 class Operator(metaclass=OperatorMeta):
-    def __new__(cls: type, operator: str):
+    def __new__(cls: type, operator: str) -> "Operator":
         if not operator.startswith(OPERATOR_PREFIX):
             raise ValueError(f"operator must start with `{OPERATOR_PREFIX}`:{operator}")
 
-        instance = super().__new__(cls)
-        Operator.__operators__[operator] = instance  # type: ignore
+        instance: Operator = super().__new__(cls)  # type: ignore
+        Operator.__operators__[operator] = instance
         return Operator.__operators__[operator]
 
     def __init__(self, operator: str):
@@ -48,13 +48,13 @@ class Operator(metaclass=OperatorMeta):
         return self.operator == __o
 
     @staticmethod
-    def validate(operator):
+    def validate(operator: str) -> Optional["Operator"]:
         try:
             return Operator(operator)
         except ValueError:
             return None
 
-    def __neg__(self):
+    def __neg__(self) -> "Operator":
         global negative
         if self in negative:
             return negative[self]
@@ -64,32 +64,24 @@ class Operator(metaclass=OperatorMeta):
 class OperatorGroup(type):
     __operators__: dict[str, Operator]
 
-    def __contains__(cls, obj: Operator):
+    def __contains__(cls, obj: Operator) -> bool:
         return obj in cls.__operators__
 
-    def __iter__(cls):
+    def __iter__(cls) -> Iterator[Operator]:
         return (cls.__operators__[name] for name in cls.__operators__)
 
+    @no_type_check
     def __new__(metacls, cls, bases, classdict, **kwds):
         new_cls = super().__new__(metacls, cls, bases, classdict, **kwds)
         operators = {str(v): v for v in classdict.values() if isinstance(v, Operator)}
         setattr(new_cls, "__operators__", operators)
         return new_cls
 
-    def __getattr__(cls, name):
-        try:
-            return cls.__operators__[
-                name if name.startswith(OPERATOR_PREFIX) else OPERATOR_PREFIX + name
-            ]
-        except KeyError:
-            raise AttributeError(name) from None
+    def __getitem__(cls, name: str) -> Operator:  # pragma: no cover
+        name = name if name.startswith(OPERATOR_PREFIX) else OPERATOR_PREFIX + name
+        return cls.__operators__[name]
 
-    def __getitem__(cls, name):  # pragma: no cover
-        return cls.__operators__.get(
-            name if name.startswith(OPERATOR_PREFIX) else OPERATOR_PREFIX + name
-        )
-
-    def registers(cls, *operators: Operator):
+    def registers(cls, *operators: Operator) -> None:
         for operator in operators:
             if operator not in cls.__operators__:
                 cls.__operators__[str(operator)] = operator

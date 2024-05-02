@@ -1,34 +1,64 @@
+default_language_version:
+  python: python3.11
+  node: 15.4.0
+
 repos:
-- repo: https://github.com/pre-commit/pre-commit-hooks
-  rev: v4.3.0
-  hooks:
-  - id: no-commit-to-branch  # prevent direct commits to main branch
-  - id: check-yaml
-    args: ['--unsafe']
-  - id: check-toml
-  - id: end-of-file-fixer
-  - id: trailing-whitespace
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.3.0
+    hooks:
+    - id: no-commit-to-branch  # prevent direct commits to main branch
+    - id: check-yaml
+      args: ['--unsafe']
+    - id: check-toml
+    - id: end-of-file-fixer
+    - id: trailing-whitespace
 
-- repo: https://github.com/codespell-project/codespell
-  rev: v2.2.4
-  hooks:
-  - id: codespell
-    additional_dependencies:
-      - tomli
-    exclude: '^pdm\.lock$'
-- repo: local
-  hooks:
-  - id: lint
-    name: Lint
-    entry: make lint
-    types: [python]
-    language: system
-    pass_filenames: false
+  - repo: https://github.com/codespell-project/codespell
+    rev: v2.2.4
+    hooks:
+    - id: codespell
+      additional_dependencies:
+        - tomli
+      exclude: '^pdm\.lock$'
 
-  - id: typecheck
-    name: Typecheck
-    entry: pdm run pyright ormantic
-    types: [python]
-    language: node
-    pass_filenames: false
-    additional_dependencies: ["pyright@1.1.345"]  # try to keep this in sync with .github/workflows/ci.yml
+  # - repo: https://github.com/pre-commit/mirrors-mypy
+  #   rev: v1.4.1
+  #   hooks:
+  #   - id: mypy
+  #     entry: pdm run mypy ormantic
+  #     additional_dependencies:
+  #       - pydantic>=2.0.0
+  #       - types-PyMySQL
+  #     args: [--no-pretty, --show-error-codes]
+
+  - repo: local
+    hooks:
+    - id: mypy
+      name: Mypy
+      entry: make mypy
+      types: [python]
+      language: system
+      pass_filenames: false
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.0.277
+    hooks:
+      - id: ruff
+        exclude: "^docs/.*|.github/release.py"
+
+  - repo: local
+    hooks:
+    - id: lint
+      name: Lint
+      entry: make lint
+      types: [python]
+      language: system
+      pass_filenames: false
+
+    - id: typecheck
+      name: Typecheck
+      entry: pdm run pyright ormantic
+      types: [python]
+      language: node
+      pass_filenames: false
+      additional_dependencies: ["pyright@1.1.345"]  # try to keep this in sync with .github/workflows/ci.yml

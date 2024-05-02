@@ -129,10 +129,10 @@ class LogicMixin:
     def __le__(self, value: Any) -> "Predicate":
         return self.lte(value)
 
-    def __eq__(self, value: Any) -> "Predicate":
+    def __eq__(self, value: Any) -> "Predicate":  # type: ignore
         return self.eq(value)
 
-    def __ne__(self, value: Any) -> "Predicate":
+    def __ne__(self, value: Any) -> "Predicate":  # type: ignore
         return self.ne(value)
 
     def __or__(self, other: Any) -> "Predicate":
@@ -175,30 +175,23 @@ class LogicMixin:
 class Predicate(LogicMixin, ArithmeticMixin):
     def __init__(self, operator: Operator, values: list | tuple) -> None:
         _values = []
+
         for i in values:
-            if (
-                isinstance(i, Predicate)
-                and operator == i.operator
-                and len(i.values) > 1
-            ):
+            if isinstance(i, Predicate) and operator == i.operator and len(i.values) > 1:
                 _values.extend(i.values)
             else:
                 _values.append(i)
-        self.operator = operator
-        self.values = _values
+        self.operator: Operator = operator
+        self.values: list = _values
 
     def dict(self) -> dict:
-        return {
-            str(self.operator): [
-                v.dict() if isinstance(v, Predicate) else v for v in self.values
-            ]
-        }
+        return {str(self.operator): [v.dict() if isinstance(v, Predicate) else v for v in self.values]}
 
     def __str__(self) -> str:
         return f"Predicate({self.operator},{str(self.values)})"
 
 
-def check_predicate(obj: Any):
+def check_predicate(obj: Any) -> bool:
     if isinstance(obj, dict):
         if all((i in Operator) for i in obj):
             return True
@@ -222,7 +215,7 @@ def encode(obj: Any) -> Predicate:
         if len(obj) > 1:
             return encode(list(map(dict, zip(obj.items()))))
 
-        express = []
+        express: list[Predicate] = []
 
         field, value = obj.popitem()
         op = Operator.validate(field)
@@ -237,31 +230,13 @@ def encode(obj: Any) -> Predicate:
                 f, v = value
                 if isinstance(v, list):
                     assert len(v) == 2
-                    e = Predicate(
-                        op,
-                        [f, validate_predicate_value(v[0])],
-                    )
-                    express.append(
-                        Predicate(
-                            LogicOperator.eq,
-                            [e, validate_predicate_value(v[1])],
-                        )
-                    )
+                    e = Predicate(op, [f, validate_predicate_value(v[0])])
+                    express.append(Predicate(LogicOperator.eq, [e, validate_predicate_value(v[1])]))
                 else:
-                    express.append(
-                        Predicate(
-                            op,
-                            [f, validate_predicate_value(v)],
-                        )
-                    )
+                    express.append(Predicate(op, [f, validate_predicate_value(v)]))
             else:
                 if isinstance(value, list):
-                    express.append(
-                        Predicate(
-                            op,
-                            [validate_predicate_value(i) for i in value],
-                        )
-                    )
+                    express.append(Predicate(op, [validate_predicate_value(i) for i in value]))
                 else:
                     express.append(
                         Predicate(
