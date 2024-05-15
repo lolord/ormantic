@@ -1,19 +1,7 @@
 from asyncio.events import AbstractEventLoop
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import (
-    Any,
-    AsyncGenerator,
-    AsyncIterable,
-    Awaitable,
-    Generator,
-    Literal,
-    Optional,
-    Self,
-    Type,
-    Union,
-    cast,
-)
+from typing import Any, AsyncGenerator, AsyncIterable, Awaitable, Generator, Literal, Optional, Self, Type, Union, cast
 
 import aiomysql
 from aiomysql import Connection, Pool
@@ -183,7 +171,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
     def find(
         self,
         model: Type[ModelType],
-        *filters: Union[Predicate, bool],
+        *filters: Predicate | bool,
         sorts: list[tuple[SupportSort, bool]] = [],
         offset: Optional[int] = None,
         rows: Optional[int] = None,
@@ -210,7 +198,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
     async def find_one(
         self,
         model: Type[ModelType],
-        *filters: Union[Predicate, bool],
+        *filters: Predicate | bool,
         sorts: list[tuple[SupportSort, bool]] = [],
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
@@ -284,7 +272,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
             cursor = await self.execute(instance)
             id = cast(int, cursor.lastrowid)
 
-            logger.info(f"lastrowid: {id}")
+            logger.debug(f"lastrowid: {id}")
             instance.set_auto_increment(id)
             instance.__fields_set__.clear()
         return instance
@@ -324,7 +312,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
         *cursors: Type[Cursor],
     ) -> Any:
         sql, params = sql_params(query)
-        logger.info(f"sql_params: {sql}, {params}")
+        logger.debug(f"sql_params: {sql}, {params}")
         async with self.connection.cursor(*cursors) as cur:
             await cur.execute(sql, params)
             return cur

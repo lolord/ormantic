@@ -115,6 +115,7 @@ class Session(ContextManager["Session"]):
         self.close()
 
     def close(self) -> None:
+        self.commit()
         self.connection.close()
 
     def find(
@@ -208,7 +209,7 @@ class Session(ContextManager["Session"]):
         if instance.__fields_set__:
             cursor = self.execute(instance)
             id = cast(int, cursor.lastrowid)
-            logger.info(f"lastrowid: {id}")
+            logger.debug(f"lastrowid: {id}")
             instance.set_auto_increment(id)
             instance.__fields_set__.clear()
         return instance
@@ -238,9 +239,9 @@ class Session(ContextManager["Session"]):
             raise RowNotFoundError
         return instance
 
-    def execute(self, query: ABCQuery | ModelType | str, *cursors: Type[Cursor]) -> Any:
+    def execute(self, query: ABCQuery | ModelType | str, *cursors: Type[Cursor]) -> ModelType | Any:
         sql, params = sql_params(query)
-        logger.info(f"sql_params: {sql}, {params}")
+        logger.debug(f"sql_params: {sql}, {params}")
         cur = self.connection.cursor(*cursors)
         if isinstance(query, Insert):
             cur.executemany(sql, params)

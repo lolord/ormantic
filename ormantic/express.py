@@ -50,7 +50,7 @@ class Func:
         return Predicate(LogicOperator.NIN, [expr, tuple(sequence)])
 
     @staticmethod
-    def match(expr: PredicateAny, pattern: Union[re.Pattern, str]) -> "Predicate":
+    def match(expr: PredicateAny, pattern: str | re.Pattern) -> "Predicate":
         return Predicate(LogicOperator.REGEX, [expr, pattern])
 
     @staticmethod

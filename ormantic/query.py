@@ -111,8 +111,6 @@ class PaginateMixin(LimitMixin):
 
 
 class CountDistinct(SelectMixin[ModelType], Generic[ModelType]):
-    # table: ABCTable
-
     def count(self, field: Union[ABCField, str, Literal[1, "*"]] = "*") -> Self:
         """如果列为主键,count(列名)效率优于count(1)
         如果列不为主键,count(1)效率优于count(列名)
