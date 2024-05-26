@@ -1,56 +1,39 @@
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ClassVar,
-    Dict,
-    Generic,
-    List,
-    Literal,
-    Optional,
-    Self,
-    Sequence,
-    Tuple,
-    TypeAlias,
-    TypeVar,
-    Union,
-)
+from typing import TYPE_CHECKING, Any, ClassVar, Dict, Generic, List, Literal, Self, Sequence, TypeVar, Union
 
 from ormantic.errors import FieldNotFoundError
 from ormantic.express import Predicate
-from ormantic.fields import CountField, DistinctField, FakeField, SupportSort, asc, desc
+from ormantic.fields import CountField, DistinctField, FakeField, SortedItem, SortedItems, asc, desc
 from ormantic.typing import ABCField, ABCQuery, ModelType
 
 QueryResultItemType = TypeVar("QueryResultItemType")
 
-SupportExpress: TypeAlias = List[SupportSort]
-
 
 class SelectMixin(ABCQuery[ModelType], Generic[ModelType]):
     if TYPE_CHECKING:
-        # table: ModelType
         fields: List[ABCField]
 
-    def select(self, *fields: Union[ABCField, str]) -> Self:
-        self.fields = []
-        for field in fields:
-            if isinstance(field, ABCField):
-                self.fields.append(field)
-            else:
-                field_ = self.table.get_field(field)
-                if field_ is None:
-                    raise FieldNotFoundError(field_)
-                self.fields.append(field_)
-
+    def select(self, *fields: Union[ABCField, str], table: ModelType | None = None) -> Self:
+        if table:
+            self.fields = list(table.get_fields().values())
+        else:
+            self.fields = []
+            for field in fields:
+                if isinstance(field, ABCField):
+                    self.fields.append(field)
+                else:
+                    field_ = self.table.get_field(field)
+                    if field_ is None:
+                        raise FieldNotFoundError(field_)
+                    self.fields.append(field_)
         return self
 
 
 class FilterMixin(ABCQuery[ModelType], Generic[ModelType]):
     if TYPE_CHECKING:
-        # table: ABCTable
         filters: List[Predicate]
 
     def filter(self, *args: Union[Predicate, Dict, bool], **kwargs: Any) -> Self:
-        if getattr(self, "filters", None) is None:  # pragma: no cover
+        if not hasattr(self, "filters"):  # pragma: no cover
             self.filters = []
         for item in args:
             if isinstance(item, Predicate):
@@ -73,16 +56,17 @@ class FilterMixin(ABCQuery[ModelType], Generic[ModelType]):
 
 class OrderByMixin(ABCQuery[ModelType], Generic[ModelType]):
     if TYPE_CHECKING:
-        sorts: SupportExpress
-        # table: ABCTable
+        sorts: SortedItems
 
-    def order_by(self, *args: Tuple[SupportSort, bool], **kwargs: bool) -> Self:
-        self.sorts += args
+    def order_by(self, *args: SortedItem, **kwargs: bool) -> Self:
+        sorts = list(args)
         for name, v in kwargs.items():
             field = self.table.get_field(name)
             if field is None:
                 raise FieldNotFoundError(field)
-            self.sorts.append(asc(field) if v else desc(field))
+            sorts.append(asc(field) if v else desc(field))
+
+        self.sorts = getattr(self, "sorts", []) + sorts
         return self
 
 
@@ -152,22 +136,17 @@ class Query(
     def __init__(
         self,
         table: ModelType,
-        fields: Sequence[Union[str, ABCField]] = [],
-        filters: Sequence[Union[Predicate, Dict, bool]] = [],
+        # fields: Sequence[Union[str, ABCField]] | None = None,
+        filters: Sequence[Union[Predicate, Dict, bool]] = (),
         offset: int | None = None,
         rows: int | None = None,
-        sorts: SupportExpress = [],
+        sorts: SortedItems = (),
     ):
         self.table = table
-        self.fields = []
-        self.filters = []
         self.offset = 0
         self.rows = 0
-        self.sorts = []
 
-        if not fields:  # pragma: no cover
-            fields = tuple(table.get_fields().values())
-        self.select(*fields)
+        self.select(table=table)
         self.filter(*filters)
         self.order_by(*sorts)
         self.limit(offset, rows)
@@ -175,13 +154,19 @@ class Query(
     def orm_name(self) -> str:
         return self.table.orm_name()
 
+    def update(self, **value: Any) -> "Update":
+        return Update(self.table, self.filters, value)
+
+    def delete(self) -> "Delete":
+        return Delete(self.table, self.filters)
+
 
 class Update(FilterMixin[ModelType]):
     def __init__(
         self,
         table: ModelType,
-        filters: Sequence[Union[Predicate, Dict]] = [],
-        value: Optional[Dict[str, Any]] = None,
+        filters: Sequence[Union[Predicate, Dict]] = (),
+        value: Dict[str, Any] | None = None,
     ):
         self.table = table
 
@@ -196,11 +181,11 @@ class Update(FilterMixin[ModelType]):
         return self.table.orm_name()
 
 
-class Delete(FilterMixin[ModelType]):
+class Delete(FilterMixin[ModelType], Generic[ModelType]):
     def __init__(
         self,
         table: ModelType,
-        filters: Sequence[Union[Predicate, Dict]] = [],
+        filters: Sequence[Union[Predicate, Dict]] = (),
     ):
         self.table = table
         self.filter(*filters)
@@ -209,8 +194,9 @@ class Delete(FilterMixin[ModelType]):
         return self.table.orm_name()
 
 
-class Insert(ABCQuery[ModelType]):
-    values: List[ModelType]
+class Insert(ABCQuery[ModelType], Generic[ModelType]):
+    if TYPE_CHECKING:
+        values: List[ModelType]
 
     def __init__(self, table: ModelType, values: List[ModelType]):
         self.table = table

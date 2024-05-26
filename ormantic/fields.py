@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Self, TypeVar
+from typing import Any, Callable, Optional, Self, Sequence, TypeAlias, TypeVar
 
 from pydantic.fields import FieldInfo, ModelField, Undefined
 
@@ -7,6 +7,8 @@ from ormantic.express import ArithmeticMixin, LogicMixin
 from ormantic.typing import ABCField, ABCTable, is_nullable
 
 SupportSort = TypeVar("SupportSort", bound=ABCField)
+SortedItem: TypeAlias = tuple[SupportSort, bool]
+SortedItems: TypeAlias = Sequence[tuple[SupportSort, bool]]
 
 
 def Field(
@@ -124,12 +126,12 @@ def Field(
     return field
 
 
-def asc(field: SupportSort) -> tuple[SupportSort, bool]:
+def asc(field: SupportSort) -> SortedItem[SupportSort]:
     """Sort by ascending `field`."""
     return (field, True)
 
 
-def desc(field: SupportSort) -> tuple[SupportSort, bool]:
+def desc(field: SupportSort) -> SortedItem[SupportSort]:
     """Sort by descending `field`."""
     return (field, False)
 

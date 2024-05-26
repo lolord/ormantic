@@ -9,7 +9,7 @@ from pymysql.cursors import Cursor, DictCursor
 from ormantic.dialects.mysql.query import sql_params
 from ormantic.errors import RowNotFoundError
 from ormantic.express import Predicate
-from ormantic.fields import FieldProxy, SupportSort
+from ormantic.fields import FieldProxy, SortedItems
 from ormantic.model import ModelType
 from ormantic.query import Delete, Insert, Query
 from ormantic.typing import ABCField, ABCQuery
@@ -18,7 +18,7 @@ from ormantic.utils import logger
 Connection: TypeAlias = PooledDedicatedDBConnection
 
 
-class ConnectFactory:
+class ConnectCreator:
     dbapi = pymysql
 
     def __init__(
@@ -54,7 +54,7 @@ class ConnectFactory:
 class Client(ContextManager["Client"]):
     def __init__(
         self,
-        db: ConnectFactory,
+        db: ConnectCreator,
         mincached: int = 0,
         maxcached: int = 0,
         maxshared: int = 0,
@@ -122,7 +122,7 @@ class Session(ContextManager["Session"]):
         self,
         model: Type[ModelType],
         *filters: Predicate | bool,
-        sorts: list[tuple[SupportSort, bool]] = [],
+        sorts: SortedItems = (),
         offset: Optional[int] = None,
         rows: Optional[int] = None,
     ) -> list[ModelType]:
@@ -137,7 +137,7 @@ class Session(ContextManager["Session"]):
         self,
         model: Type[ModelType],
         *filters: Predicate | bool,
-        sorts: list[tuple[SupportSort, bool]] = [],
+        sorts: SortedItems = (),
     ) -> Optional[ModelType]:
         """Search for a Model instance matching the query filter provided
 
@@ -183,7 +183,7 @@ class Session(ContextManager["Session"]):
         model: Type[ModelType],
         field: FieldProxy,
         *filters: Predicate,
-        sorts: list[tuple[SupportSort, bool]] = [],
+        sorts: SortedItems = (),
     ) -> list[Any]:
         """Get the field of rows matching a query
 

@@ -115,8 +115,17 @@ def test_update():
     assert query.filters == [User_ID == 1]
     assert query.value == {"name": "test"}
 
+    query = Query(User).filter(User_ID == 1).update(name="test")
+    assert query.table is User
+    assert query.filters == [User_ID == 1]
+    assert query.value == {"name": "test"}
+
 
 def test_delete():
     query = Delete(User).filter(User_ID == 1)
+    assert query.table is User
+    assert query.filters == [User_ID == 1]
+
+    query = Query(User).filter(User_ID == 1).delete()
     assert query.table is User
     assert query.filters == [User_ID == 1]

@@ -1,8 +1,9 @@
 import pytest
 
-from ormantic import Delete, Field, Insert, Model
-from ormantic.dialects.mysql import Client, ConnectFactory
+from ormantic import Delete, Field, Model
+from ormantic.dialects.mysql import Client, ConnectCreator
 from ormantic.errors import RowNotFoundError
+from ormantic.query import Insert
 
 table = """CREATE TABLE `users` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -24,7 +25,7 @@ class User(Model):
 
 @pytest.fixture(scope="function")
 def client():
-    factory = ConnectFactory(
+    factory = ConnectCreator(
         host="192.168.56.101",
         port=3306,
         user="root",
