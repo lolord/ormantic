@@ -72,7 +72,7 @@ testcovorm: testorm
 
 
 .PHONY: all  ## Run the standard set of checks performed in CI
-all: lint typecheck codespell testcov
+all: format lint typecheck codespell testcov
 
 .PHONY: help  ## Display this message
 help:

@@ -22,14 +22,8 @@ class User(Model):
 
 
 @pytest.mark.asyncio
-async def test_mysql_curd():
-    client = await create_client(
-        host="192.168.56.101",
-        port=3306,
-        user="root",
-        password="123456",
-        db="test",
-    )
+async def test_mysql_curd(mysql_config: dict):
+    client = await create_client(**mysql_config)
 
     session = await client.session()
 

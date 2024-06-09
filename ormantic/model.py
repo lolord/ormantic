@@ -44,9 +44,11 @@ class ModelMetaclass(pydantic.main.ModelMetaclass, ABCTable):
                 default = namespace.get(field_name)
                 if default is None:
                     annotations[field_name] = Optional[field_type]
-
                 else:
                     assert isinstance(default, pydantic.fields.FieldInfo)
+                    # TODO TESTIT
+                    # if default.extra.get("primary") and is_nullable(field_type):
+                    #     raise
                     if default.extra.get("update_factory") is not None:
                         hot_fields.add(field_name)
                     if default.extra.get("autoincrement") is True:
@@ -174,12 +176,11 @@ class BaseORMModel(pydantic.BaseModel):
         # The default value obtained through object signature may be None.
         # If there is a factory method, this field should be popped.
 
-        unsets = set()
         for name, field in self.__orm_fields__.items():
             if field.nullable:
                 if name not in data:
                     data[name] = None
-                    unsets.add(name)
+
             elif data.get(name) is None:
                 if field.default_factory:
                     data[name] = field.default_factory()
@@ -188,8 +189,6 @@ class BaseORMModel(pydantic.BaseModel):
 
         try:
             super(BaseORMModel, self).__init__(**data)
-            for i in unsets:
-                self.__fields_set__.remove(i)
         except TypeError as e:  # pragma: no cover
             raise TypeError(
                 "Model values must be a dict; you may not have returned a dictionary from a root validator"

@@ -85,8 +85,6 @@ class OperatorGroup(type):
         for operator in operators:
             if operator not in cls.__operators__:
                 cls.__operators__[str(operator)] = operator
-            else:  # pragma: no cover
-                raise ValueError(f"{operator} already exists in the {cls}")
 
 
 class ArithmeticOperator(metaclass=OperatorGroup):

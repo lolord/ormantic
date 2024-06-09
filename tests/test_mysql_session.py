@@ -24,14 +24,8 @@ class User(Model):
 
 
 @pytest.fixture(scope="function")
-def client():
-    factory = ConnectCreator(
-        host="192.168.56.101",
-        port=3306,
-        user="root",
-        password="123456",
-        database="test",
-    )
+def client(mysql_config: dict):
+    factory = ConnectCreator(**mysql_config)
     return Client(factory, mincached=1, maxconnections=5)
 
 

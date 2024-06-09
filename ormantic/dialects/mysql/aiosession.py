@@ -298,6 +298,7 @@ class AIOSession(AbstractAsyncContextManager, Awaitable["AIOSession"]):
             logger.debug(f"lastrowid: {id}")
             instance.set_auto_increment(id)
             instance.__fields_set__.clear()
+
         return instance
 
     async def save_all(self, instances: list[ModelType]) -> list[ModelType]:

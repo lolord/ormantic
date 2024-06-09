@@ -23,14 +23,8 @@ class User(Model):
 
 
 @pytest.mark.asyncio
-async def test_mysql_curd():
-    client = await create_client(
-        host="192.168.56.101",
-        port=3306,
-        user="root",
-        password="123456",
-        db="test",
-    )
+async def test_mysql_curd(mysql_config: dict):
+    client = await create_client(**mysql_config)
     session = await client.session()
     # await session.execute("drop table `users`;")
     # await session.execute(table)
@@ -39,6 +33,7 @@ async def test_mysql_curd():
     count = await session.delete(Delete(User))
     tom = User(id=1, name="tom", email="tom@email.com", password="123456")
     jerry = User(name="jerry", email="jerry@email.com", password="123456")  # type: ignore
+    print("jerry", jerry.__fields_set__)
     await session.save_all([tom, jerry])
     count = await session.count(User)
     assert count == 2
@@ -55,14 +50,8 @@ async def test_mysql_curd():
 
 
 @pytest.mark.asyncio
-async def test_mysql_curd_with_context():
-    client = await create_client(
-        host="192.168.56.101",
-        port=3306,
-        user="root",
-        password="123456",
-        db="test",
-    )
+async def test_mysql_curd_with_context(mysql_config: dict):
+    client = await create_client(**mysql_config)
     async with client:
         async with client.session() as session:
             count = await session.delete(Delete(User))
