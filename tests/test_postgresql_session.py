@@ -73,7 +73,7 @@ def test_postgresql_curd(client: Client):
 @pytest.mark.usefixtures("client")
 def test_postgresql_curd_with_context(client: Client):
     with client:
-        with client.session() as session:
+        with client.session(autocommit=True) as session:
             count = session.delete(Delete(User))
             none = session.find_one(User)
             assert none is None
@@ -98,8 +98,6 @@ def test_postgresql_curd_with_context(client: Client):
                 session.remove(tom)
             tom = session.find_one(User, User.id == 1)
             assert tom is None
-
-            session.commit()
 
 
 # @pytest.mark.skip(reason="NotImplemented")
