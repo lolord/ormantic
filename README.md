@@ -6,7 +6,7 @@ ORM(Object Relational Mapping) for relational database based on standard python 
 
 ## Features
 
-1. **Easy**: If you know how to use pydantic, then you will also use it.
+1. **Easy**: If you know how to use `orm`, then you will also use it.
 2. **Query**: Structured query objects can ignore differences between databases.
 3. **Validate**: Pydantic can help with data validation.
 
@@ -23,11 +23,71 @@ pip install git+https://github.com/lolord/ormantic.git
 
 ## Basic Usage
 
+### Synchronous
+
 ``` python
 import pytest
 
+from ormantic import Field, Model
+from ormantic.dialects.mysql import Client
+from ormantic.dialects.mysql.session import ConnectCreator
+
+"""CREATE TABLE `users` (
+    `id` int(11) NOT NULL AUTO_INCREMENT,
+    `name` varchar(255) COLLATE utf8_bin NOT NULL,
+    `email` varchar(255) COLLATE utf8_bin NOT NULL,
+    `password` varchar(255) COLLATE utf8_bin NOT NULL,
+    PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_bin
+AUTO_INCREMENT=1 ;"""
+
+
+class User(Model):
+    id: int = Field(primary=True, autoincrement=True)
+    name: str
+    email: str
+    password: str
+    __table__ = "users"
+
+
+@pytest.fixture(scope="function")
+def mysql_sync_client(mysql_config: dict):
+    factory = ConnectCreator(**mysql_config)
+    return Client(factory, mincached=1, maxconnections=5)
+
+
+def test_mysql_sync_demo(mysql_sync_client: Client):
+    with mysql_sync_client:
+        with mysql_sync_client.session(autocommit=True) as session:
+            # insert
+            tom = User(id=1, name="tom", email="tom@email.com", password="123456")
+            jerry = User(name="jerry", email="jerry@email.com", password="123456")  # type: ignore
+            session.save_all([tom, jerry])
+
+            # query
+            tom = session.find_one(User, User.id == 1)
+            assert tom
+
+            # update
+            new_pwd = "654321"
+            tom.password = new_pwd
+            session.save(tom)
+            tom = session.find_one(User, User.id == 1)
+            assert tom and tom.password == new_pwd
+
+            # delete
+            session.remove(tom)
+
+```
+
+### Asynchronous
+
+```python
+import pytest
+
 from ormantic import Field, Model, PrimaryKeyModifyError
-from ormantic.dialects.mysql import create_client
+from ormantic.dialects.mysql import AIOClient, create_client
+from ormantic.dialects.mysql.session import ConnectCreator
 
 """CREATE TABLE `users` (
     `id` int(11) NOT NULL AUTO_INCREMENT,
@@ -48,73 +108,29 @@ class User(Model):
 
 
 @pytest.mark.asyncio
-async def test_mysql_curd():
-    client = await create_client(
-        host="192.168.56.101",
-        port=3306,
-        user="root",
-        password="123456",
-        db="test",
-    )
+async def test_mysql_async_demo(mysql_config: dict):
+    client = await create_client(**mysql_config)
+    async with client:
+        async with client.session() as session:
+            # insert
+            tom = User(id=1, name="tom", email="tom@email.com", password="123456")
+            jerry = User(name="jerry", email="jerry@email.com", password="123456")  # type: ignore
+            await session.save_all([tom, jerry])
 
-    session = await client.session()
+            # query
+            tom = await session.find_one(User, User.id == 1)
+            assert tom
 
-    session.execute
-    id = 1
-    email = "xxx@xxx.com"
-    password = "123456"
-    user = User(id=id, name="xxx", email=email, password=password)
+            # update
+            new_pwd = "654321"
+            tom.password = new_pwd
+            await session.save(tom)
+            tom = await session.find_one(User, User.id == 1)
+            assert tom and tom.password == new_pwd
 
-    # save user to db
-    await session.save(user)
+            # delete
+            await session.remove(tom)
 
-    # query user from the db
-    user = await session.find_one(User, User.id == id)  # type: ignore
-    assert user is not None
-    assert user.id == id
-    assert user.email == email
-    assert user.password == password
-
-    new_pwd = "654321"
-    user.password = new_pwd
-    # modify user and save them to the db
-    await session.save(user)
-
-    # query updated user
-    user = await session.find_one(User, User.id == id)  # type: ignore
-    assert user is not None
-    assert user.id == id
-    assert user.email == email
-    assert user.password == new_pwd
-
-    # Delete user from database
-    await session.remove(user)
-
-    # user does not exist
-    user = await session.find_one(User, User.id == id)  # type: ignore
-    assert user is None
-
-    # auto-increment id
-    user = User(name="xxx", email=email, password=password)  # type: ignore
-    assert user.id is None
-
-    await session.save(user)
-    # update auto-increment id after saving
-    assert user.id is not None
-
-    inc_id = user.id
-
-    # the user exists
-    user = await session.find_one(User, User.id == inc_id)  # type: ignore
-    assert user is not None
-    assert user.id == inc_id
-
-    # if the primary key is not None, it cannot be modified
-    with pytest.raises(PrimaryKeyModifyError):
-        user.id = user.id + 1
-
-    await session.close()
-    await client.close()
 ```
 
 ## Implemented database dialects
@@ -123,4 +139,6 @@ async def test_mysql_curd():
   - [X] aiomysql
   - [X] pymysql
 - [ ] PostgreSQL
+  - [X] psycopg2
+  - [ ] asyncpg
 - [ ] SQLite

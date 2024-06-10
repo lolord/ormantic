@@ -243,13 +243,8 @@ def upsert_sql_params(value: Model) -> tuple[str, tuple[Any, ...]]:
     sql.append(f"({', '.join(mysql_token(field) for field in fields.values())})")
     sql.append("values")
 
-    sql.append("(")
-    for i in fields:
-        sql.append(f"{Config.PARAMSTYLE},")
-        params.append(getattr(value, i))
-    # remove tail comma
-    sql.append(sql.pop()[:-1])
-    sql.append(")")
+    sql.append(f"({ ', '.join(Config.PARAMSTYLE for _ in fields)})")
+    params.extend(getattr(value, i) for i in fields)
 
     sql.append("ON")
     sql.append("DUPLICATE")

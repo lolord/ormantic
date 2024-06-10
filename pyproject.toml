@@ -40,10 +40,7 @@ dependencies = ["pydantic~=1.10", "loguru>=0.7.2", "typing-extensions>=4.11.0"]
 [project.optional-dependencies]
 aiomysql = ["aiomysql>=0.2.0"]
 mysql = ["PyMySQL==1.1.0", "DBUtils>=3.1.0", "types-PyMySQL>=1.1.0.20240425"]
-postgresql = [
-    "psycopg2>=2.9.9",
-    "types-psycopg2>=2.9.21.20240417",
-]
+postgresql = ["psycopg2>=2.9.9", "types-psycopg2>=2.9.21.20240417"]
 
 [tool.coverage.run]
 branch = true
@@ -63,6 +60,7 @@ exclude_lines = [
     "def __str__.*",
     "def __hash__.*",
     "raise NotImplementedError",
+    "@abstractmethod",
 ]
 
 
