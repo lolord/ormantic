@@ -51,13 +51,13 @@ symbols = {
 }
 
 
-def mysql_predicate_tokens(expr: Any, sql: list[str], params: List) -> None:
+def postgresql_predicate_tokens(expr: Any, sql: list[str], params: List) -> None:
     if isinstance(expr, str):
-        sql.append(".".join(f"`{i}`" for i in expr.split(".")))
+        sql.append(".".join(f"{i}" for i in expr.split(".")))
 
     elif isinstance(expr, FieldProxy):
         # quote name
-        sql.append(f"`{expr.table.orm_name()}`.`{expr.orm_name()}`")
+        sql.append(f"{expr.orm_name()}")
 
     elif isinstance(expr, Predicate):
         if expr.operator in LogicOperator:
@@ -68,7 +68,7 @@ def mysql_predicate_tokens(expr: Any, sql: list[str], params: List) -> None:
                     # TODO
                     if bracket:
                         sql.append("(")
-                    mysql_predicate_tokens(i, sql, params)
+                    postgresql_predicate_tokens(i, sql, params)
                     if bracket:
                         sql.append(")")
                     sql.append(symbols[expr.operator])
@@ -78,20 +78,20 @@ def mysql_predicate_tokens(expr: Any, sql: list[str], params: List) -> None:
                 and len(expr.values) == 2
                 and expr.values[1] is None
             ):
-                mysql_predicate_tokens(expr.values[0], sql, params)
+                postgresql_predicate_tokens(expr.values[0], sql, params)
                 if expr.operator == LogicOperator.eq:
                     sql.append("is null")
                 else:
                     sql.append("is not null")
             else:
-                mysql_predicate_tokens(expr.values[0], sql, params)
+                postgresql_predicate_tokens(expr.values[0], sql, params)
                 sql.append(symbols[expr.operator])
                 sql.append(Config.PARAMSTYLE)
                 params.append(expr.values[1])
 
         elif expr.operator in ArithmeticOperator:
             field, value = expr.values
-            mysql_predicate_tokens(field, sql, params)
+            postgresql_predicate_tokens(field, sql, params)
             sql.append(symbols[expr.operator])
             sql.append(Config.PARAMSTYLE)
 
@@ -103,26 +103,19 @@ def mysql_predicate_tokens(expr: Any, sql: list[str], params: List) -> None:
         raise ValueError(f"Expression not supported: {expr}")
 
 
-def predicate_sql_params(expr: Predicate) -> tuple[str, List]:
-    sql: list[str] = []
-    params: list[Any] = []
-    mysql_predicate_tokens(expr, sql, params)
-    return " ".join(sql), params
-
-
-def mysql_token(value: Any) -> str:
+def postgresql_token(value: Any) -> str:
     if isinstance(value, ABCField):
         if isinstance(value, DistinctField):
-            return f"distinct {mysql_token(value.field)}"
+            return f"distinct {postgresql_token(value.field)}"
         if isinstance(value, CountField):
-            return f"count({mysql_token(value.field)})"
+            return f"count({postgresql_token(value.field)})"
         else:
             name = value.orm_name()
             if name in ("1", "*"):
                 return name
-            return f"{mysql_token(value.table)}.`{name}`"
+            return f"{name}"
     elif isinstance(value, ABCTable):
-        return f"`{value.orm_name()}`"
+        return f"{value.orm_name()}"
     else:  # pragma: no cover
         raise ValueError(value)
 
@@ -136,8 +129,6 @@ def sql_params(value: Any) -> tuple[str, tuple[Any, ...]]:
         return update_sql_params(value)
     elif isinstance(value, Insert):
         return insert_sql_params(value)
-    elif isinstance(value, Model):
-        return upsert_sql_params(value)
     elif isinstance(value, str):
         return (value, ())
     else:  # pragma: no cover
@@ -148,20 +139,20 @@ def query_sql_params(query: Query[ModelType]) -> tuple[str, tuple[Any, ...]]:
     sql: list[str] = []
     params: list[Any] = []
     sql.append("select")
-    sql.append(", ".join(mysql_token(field) for field in query.fields))
+    sql.append(", ".join(postgresql_token(field) for field in query.fields))
 
     sql.append("from")
-    sql.append(f"`{query.table.orm_name()}`")
+    sql.append(f"{query.table.orm_name()}")
 
     if query.filters:
         sql.append("where")
 
-        mysql_predicate_tokens(Predicate(LogicOperator.AND, query.filters), sql, params)
+        postgresql_predicate_tokens(Predicate(LogicOperator.AND, query.filters), sql, params)
     if query.sorts:
         sql.append("order")
         sql.append("by")
         for field, sort in query.sorts:
-            sql.append(mysql_token(field))
+            sql.append(postgresql_token(field))
             sql.append("asc," if sort else "desc,")
         # remove tail comma
         sql.append(sql.pop()[:-1])
@@ -179,11 +170,11 @@ def delete_sql_params(query: Delete[ModelType]) -> tuple[str, tuple[Any, ...]]:
     params: list[Any] = []
     sql.append("delete")
     sql.append("from")
-    sql.append(f"`{query.table.orm_name()}`")
+    sql.append(f"{query.table.orm_name()}")
 
     if query.filters:
         sql.append("where")
-        mysql_predicate_tokens(Predicate(LogicOperator.AND, query.filters), sql, params)
+        postgresql_predicate_tokens(Predicate(LogicOperator.AND, query.filters), sql, params)
 
     return " ".join(sql), tuple(params)
 
@@ -192,12 +183,12 @@ def update_sql_params(query: Update[ModelType]) -> tuple[str, tuple[Any, ...]]:
     sql: list[str] = []
     params: list[Any] = []
     sql.append("update")
-    sql.append(f"`{query.table.orm_name()}`")
+    sql.append(f"{query.table.orm_name()}")
     sql.append("set")
 
     for k, v in query.value.items():
         field = query.table.get_field(k)
-        sql.append(mysql_token(field))
+        sql.append(postgresql_token(field))
         sql.append("=")
         sql.append(f"{Config.PARAMSTYLE},")
         params.append(v)
@@ -207,55 +198,28 @@ def update_sql_params(query: Update[ModelType]) -> tuple[str, tuple[Any, ...]]:
 
     if query.filters:
         sql.append("where")
-        mysql_predicate_tokens(Predicate(LogicOperator.AND, query.filters), sql, params)
+        postgresql_predicate_tokens(Predicate(LogicOperator.AND, query.filters), sql, params)
 
     return " ".join(sql), tuple(params)
 
 
-def insert_sql_params(query: Insert[ModelType]) -> tuple[str, tuple[Any, ...]]:
+def insert_sql_params(query: Insert[Model]) -> tuple[str, tuple[Any, ...]]:
     fields = query.table.get_fields()
+
+    for i in query.table.__primary_keys__:
+        if getattr(query.values[0], i, None) is None:
+            fields.pop(i)
 
     sql = []
     sql.append("insert")
     sql.append("into")
-    sql.append(f"`{query.table.orm_name()}`")
-    sql.append(f"({', '.join(mysql_token(field) for field in fields.values())})")
+    sql.append(f"{query.table.orm_name()}")
+    sql.append(f"({', '.join(field.orm_name() for field in fields.values())})")
     sql.append("values")
     sql.append(f"({', '.join(Config.PARAMSTYLE for _ in fields)})")
 
     params = []
     for value in query.values:
         params.append(tuple(getattr(value, i) for i in fields))
-
-    return " ".join(sql), tuple(params)
-
-
-def upsert_sql_params(value: Model) -> tuple[str, tuple[Any, ...]]:
-    table = type(value)
-    fields = table.get_fields()
-
-    sql: list[str] = []
-    params: list[Any] = []
-
-    sql.append("insert")
-    sql.append("into")
-    sql.append(f"`{table.orm_name()}`")
-    sql.append(f"({', '.join(mysql_token(field) for field in fields.values())})")
-    sql.append("values")
-
-    sql.append(f"({ ', '.join(Config.PARAMSTYLE for _ in fields)})")
-    params.extend(getattr(value, i) for i in fields)
-
-    sql.append("ON")
-    sql.append("DUPLICATE")
-    sql.append("KEY")
-    sql.append("UPDATE")
-
-    for i, field in table.__petty_keys__.items():
-        sql.append(mysql_token(field))
-        sql.append("=")
-        sql.append(f"{Config.PARAMSTYLE},")
-        params.append(getattr(value, i))
-    sql.append(sql.pop()[:-1])
 
     return " ".join(sql), tuple(params)

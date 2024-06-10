@@ -1,5 +1,5 @@
 from .aiosession import AIOClient, AIOCursor, AIOSession, create_client
-from .session import Client, ConnectFactory, Session
+from .session import Client, ConnectCreator, Session
 
 __all__ = (
     "AIOClient",
@@ -7,6 +7,6 @@ __all__ = (
     "AIOCursor",
     "create_client",
     "Client",
-    "ConnectFactory",
+    "ConnectCreator",
     "Session",
 )

@@ -1,3 +1,4 @@
+from copy import copy
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -15,19 +16,9 @@ from typing import (
 
 import pydantic
 
-from ormantic.errors import (
-    AutoIncrementFieldExists,
-    PrimaryKeyMissingError,
-    PrimaryKeyModifyError,
-)
+from ormantic.errors import AutoIncrementFieldExists, PrimaryKeyMissingError, PrimaryKeyModifyError
 from ormantic.fields import Field, FieldProxy
-from ormantic.typing import (
-    ABCTable,
-    AbstractSetIntStr,
-    DictStrAny,
-    FieldDict,
-    MappingIntStrAny,
-)
+from ormantic.typing import ABCTable, AbstractSetIntStr, DictStrAny, FieldDict, MappingIntStrAny
 from ormantic.utils import is_dunder
 
 _is_base_model_class_defined = False
@@ -53,9 +44,11 @@ class ModelMetaclass(pydantic.main.ModelMetaclass, ABCTable):
                 default = namespace.get(field_name)
                 if default is None:
                     annotations[field_name] = Optional[field_type]
-
                 else:
                     assert isinstance(default, pydantic.fields.FieldInfo)
+                    # TODO TESTIT
+                    # if default.extra.get("primary") and is_nullable(field_type):
+                    #     raise
                     if default.extra.get("update_factory") is not None:
                         hot_fields.add(field_name)
                     if default.extra.get("autoincrement") is True:
@@ -134,7 +127,7 @@ class BaseORMModel(pydantic.BaseModel):
 
     @classmethod
     def get_fields(cls) -> FieldDict:
-        return cls.__orm_fields__
+        return copy(cls.__orm_fields__)
 
     @classmethod
     def get_field(cls, field_name: str) -> Optional[FieldProxy]:
@@ -187,6 +180,7 @@ class BaseORMModel(pydantic.BaseModel):
             if field.nullable:
                 if name not in data:
                     data[name] = None
+
             elif data.get(name) is None:
                 if field.default_factory:
                     data[name] = field.default_factory()
