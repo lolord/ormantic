@@ -1,9 +1,10 @@
 from abc import abstractmethod
-from types import ModuleType, TracebackType
-from typing import Any, Callable, ContextManager, Literal, Optional, Type, TypeAlias, TypeVar, Union, cast
+from types import TracebackType
+from typing import Any, Callable, ContextManager, Literal, Optional, Type, TypeVar, Union, cast
 
-from dbutils.pooled_db import PooledDB, PooledDedicatedDBConnection
+from dbutils.pooled_db import PooledDB
 
+from ormantic.dialects.dbapi import ConnectionProto, CursorProto, DBAPIProto
 from ormantic.errors import RowNotFoundError
 from ormantic.express import Predicate
 from ormantic.fields import FieldProxy, SortedItems
@@ -12,11 +13,9 @@ from ormantic.query import Delete, Insert, Query, Update
 from ormantic.typing import ABCField, ABCQuery
 from ormantic.utils import logger
 
-Connection: TypeAlias = PooledDedicatedDBConnection
-
 
 class BaseConnectCreator:
-    dbapi: ModuleType
+    dbapi: DBAPIProto
 
     def __init__(
         self,
@@ -35,7 +34,7 @@ class BaseConnectCreator:
         self.port = port
         self.kwargs = kwargs
 
-    def __call__(self) -> Any:
+    def __call__(self) -> ConnectionProto:
         connect = type(self).dbapi.connect(
             user=self.user,
             password=self.password,
@@ -48,7 +47,6 @@ class BaseConnectCreator:
 
 
 ClientT = TypeVar("ClientT", bound="BaseClient")
-SyncSessionT = TypeVar("SyncSessionT", bound="BaseSyncSession")
 
 
 class BaseClient(ContextManager[ClientT]):
@@ -98,11 +96,14 @@ class BaseClient(ContextManager[ClientT]):
         ...
 
 
+SyncSessionT = TypeVar("SyncSessionT", bound="BaseSyncSession")
+
+
 class BaseSyncSession(ContextManager[SyncSessionT]):
     sql_params: Callable[..., tuple[str, tuple[Any, ...]]]
 
-    def __init__(self, connection: Connection, autocommit: bool = False) -> None:
-        self.connection: Connection = connection
+    def __init__(self, connection: ConnectionProto, autocommit: bool = False) -> None:
+        self.connection: ConnectionProto = connection
         self.autocommit = autocommit
 
     def __exit__(
@@ -221,7 +222,7 @@ class BaseSyncSession(ContextManager[SyncSessionT]):
                 )
 
             cursor = self.execute(query)
-            id = cast(int, cursor.lastrowid)
+            id = cursor.lastrowid
             logger.debug(f"lastrowid: {id}")
             instance.set_auto_increment(id)
             instance.__fields_set__.clear()
@@ -234,7 +235,7 @@ class BaseSyncSession(ContextManager[SyncSessionT]):
 
     def delete(self, query: Delete) -> int:
         cursor = self.execute(query)
-        return cast(int, cursor.rowcount)
+        return cursor.rowcount
 
     def remove(self, instance: ModelType) -> ModelType:
         """Remove an instance from the database
@@ -252,7 +253,7 @@ class BaseSyncSession(ContextManager[SyncSessionT]):
             raise RowNotFoundError
         return instance
 
-    def execute(self, query: ABCQuery | str) -> Any:
+    def execute(self, query: ABCQuery | str) -> CursorProto:
         sql, params = type(self).sql_params(query)
         logger.debug(f"sql_params: {sql}, {params}")
         cur = self.connection.cursor()

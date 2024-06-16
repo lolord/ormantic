@@ -1,21 +1,19 @@
-from typing import TypeAlias, cast
+from typing import cast
 
 import psycopg2
-from dbutils.pooled_db import PooledDedicatedDBConnection
 
 from ormantic.dialects.bases import BaseClient, BaseConnectCreator, BaseSyncSession
+from ormantic.dialects.dbapi import ConnectionProto, DBAPIProto
 from ormantic.dialects.postgresql.query import sql_params
-
-Connection: TypeAlias = PooledDedicatedDBConnection
 
 
 class ConnectCreator(BaseConnectCreator):
-    dbapi = psycopg2
+    dbapi = cast(DBAPIProto, psycopg2)
 
 
 class Client(BaseClient["Client"]):
     def session(self, autocommit: bool = False) -> "Session":
-        conn = cast(Connection, self.pool.dedicated_connection())
+        conn = cast(ConnectionProto, self.pool.dedicated_connection())
         return Session(conn, autocommit=autocommit)
 
 

@@ -1,21 +1,19 @@
-from typing import TypeAlias, cast
+from typing import cast
 
 import pymysql
-from dbutils.pooled_db import PooledDedicatedDBConnection
 
 from ormantic.dialects.bases import BaseClient, BaseConnectCreator, BaseSyncSession
+from ormantic.dialects.dbapi import ConnectionProto, DBAPIProto
 from ormantic.dialects.mysql.query import sql_params
-
-Connection: TypeAlias = PooledDedicatedDBConnection
 
 
 class ConnectCreator(BaseConnectCreator):
-    dbapi = pymysql
+    dbapi = cast(DBAPIProto, pymysql)
 
 
 class Client(BaseClient["Client"]):
     def session(self, autocommit: bool = False) -> "Session":
-        conn = cast(Connection, self.pool.dedicated_connection())
+        conn = cast(ConnectionProto, self.pool.dedicated_connection())
         return Session(conn, autocommit)
 
 
